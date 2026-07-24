@@ -1,7 +1,8 @@
-// Factories + stat math for enemies, towers and barracks soldiers.
+// Factories + stat math for enemies, towers, barracks soldiers and the hero.
 import { SELL_REFUND } from "./config.js";
 import { ENEMY_TYPES } from "./data/enemyTypes.js";
 import { TOWER_TYPES } from "./data/towerTypes.js";
+import { HERO } from "./data/hero.js";
 import { nearestPointOnPath } from "./geometry.js";
 import { state, PATH } from "./state.js";
 
@@ -85,4 +86,18 @@ export function relocateRally(tower, newRally) {
     s.x = s.home.x;
     s.y = s.home.y;
   });
+}
+
+export function makeHero(pos) {
+  return {
+    x: pos.x, y: pos.y, commandPos: { x: pos.x, y: pos.y },
+    hp: HERO.maxHp, maxHp: HERO.maxHp,
+    alive: true, respawn: 0, target: null, attackCd: 0,
+  };
+}
+
+// Player clicked the battlefield: send the hero there. Doesn't interrupt a
+// fight already in progress (see updateHero) — it heads out once that's done.
+export function commandHero(hero, x, y) {
+  hero.commandPos = { x, y };
 }

@@ -36,6 +36,7 @@
   #hud .stat b { color: var(--gold); }
   #hud .lives b { color: var(--danger); }
   #hud .wave b { color: var(--accent); }
+  #hud .hero b { color: #e0a83a; }
   #stage {
     position: relative;
     border-radius: 12px; overflow: hidden;
@@ -212,12 +213,13 @@
 
   <!-- GAMEPLAY VIEW -->
   <div id="playView">
-    <div class="sub">Click a build spot to build · click a tower to upgrade or sell · stop the creeps before they reach the castle.</div>
+    <div class="sub">Click a build spot to build · click a tower to upgrade or sell · click your hero then a spot to send it there · stop the creeps before they reach the castle.</div>
     <div id="hud">
       <span class="stat lvl">🗺 <b id="levelName">—</b></span>
       <span class="stat">💰 Gold <b id="gold">0</b></span>
       <span class="stat lives">❤️ Lives <b id="lives">0</b></span>
       <span class="stat wave">🌊 Wave <b id="wave">0</b>/<span id="waveMax">0</span></span>
+      <span class="stat hero">🦸 Hero <b id="heroHp">—</b></span>
     </div>
     <div id="stage">
       <canvas id="game" width="900" height="560"></canvas>

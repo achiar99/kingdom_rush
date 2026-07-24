@@ -7,6 +7,7 @@
 // a function body, long after both modules have finished loading.
 import { CONFIG } from "./config.js";
 import { WAVES } from "./data/levels.js";
+import { HERO } from "./data/hero.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy } from "./entities.js";
@@ -62,6 +63,10 @@ export function update(dt) {
 
   // barracks soldiers: acquire, move, melee, block
   for (const t of state.towers) if (t.def.attack === "none") updateBarracks(t, dt);
+
+  // the hero: acquire, move, melee, block (same shape as a barracks soldier,
+  // but roams freely instead of being tied to a tower)
+  updateHero(dt);
 
   // move enemies that aren't blocked in melee
   for (const e of state.enemies) {
@@ -190,5 +195,55 @@ function updateBarracks(tower, dt) {
       s.x += ((dest.x - s.x) / d) * Math.min(step, d);
       s.y += ((dest.y - s.y) / d) * Math.min(step, d);
     }
+  }
+}
+
+function updateHero(dt) {
+  const hero = state.hero;
+  if (!hero) return;
+
+  if (!hero.alive) {
+    hero.respawn -= dt;
+    if (hero.respawn <= 0) {
+      hero.alive = true; hero.hp = HERO.maxHp;
+      hero.x = hero.commandPos.x; hero.y = hero.commandPos.y;
+      hero.target = null; hero.attackCd = 0;
+    }
+    return;
+  }
+
+  // drop dead / too-far targets — leashed to the hero's OWN current position,
+  // not a fixed point, since it roams instead of sitting at one tower
+  if (hero.target && (hero.target.dead || dist(hero.x, hero.y, hero.target.x, hero.target.y) > HERO.aggroRadius))
+    hero.target = null;
+  // acquire nearest ground enemy within aggro radius (flyers can't be reached)
+  if (!hero.target) {
+    let best = null, bestD = Infinity;
+    for (const e of state.enemies) {
+      if (e.dead || e.flying) continue;
+      const d = dist(hero.x, hero.y, e.x, e.y);
+      if (d <= HERO.aggroRadius && d < bestD) { best = e; bestD = d; }
+    }
+    hero.target = best;
+  }
+
+  const dest = hero.target || hero.commandPos;
+  const d = dist(hero.x, hero.y, dest.x, dest.y);
+  if (hero.target && d <= HERO.meleeRange) {
+    // locked in melee: block the creep and trade blows
+    hero.target.engaged = true;
+    hero.attackCd -= dt;
+    if (hero.attackCd <= 0) { damageEnemy(hero.target, HERO.damage); hero.attackCd = HERO.attackInterval; }
+    hero.target.attackCd -= dt;
+    if (hero.target.attackCd <= 0) {
+      hero.hp -= CONFIG.enemy.meleeDamage;
+      hero.target.attackCd = CONFIG.enemy.attackInterval;
+      if (hero.hp <= 0) { hero.alive = false; hero.respawn = HERO.respawnTime; hero.target = null; }
+    }
+  } else if (d > 1) {
+    // walk toward target (to intercept) or back to the commanded position
+    const step = HERO.speed * dt;
+    hero.x += ((dest.x - hero.x) / d) * Math.min(step, d);
+    hero.y += ((dest.y - hero.y) / d) * Math.min(step, d);
   }
 }

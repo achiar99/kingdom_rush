@@ -24,10 +24,11 @@ export function loadLevel(idx) {
 
 export const state = {
   gold: 0, lives: 0, waveIndex: -1,
-  enemies: [], towers: [], projectiles: [], effects: [],
+  enemies: [], towers: [], projectiles: [], effects: [], hero: null,
   spawnQueue: [], spawnTimer: 0,
   running: false, over: false, paused: false, speed: 1,
   hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
+  heroSelected: false,
 };
 
 export function spotOccupied(spot) {

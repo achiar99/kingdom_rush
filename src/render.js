@@ -2,6 +2,7 @@
 // draw* function for the ground, path, towers, enemies, effects and castle.
 import { CONFIG } from "./config.js";
 import { TOWER_TYPES } from "./data/towerTypes.js";
+import { HERO } from "./data/hero.js";
 import { state, PATH, BUILD_SPOTS, THEME, spotOccupied } from "./state.js";
 import { acquireTarget } from "./simulation.js";
 
@@ -56,14 +57,22 @@ export function render() {
 
   for (const t of state.towers) drawTower(t);
 
-  // soldiers + enemies sorted together by y for depth layering
+  // soldiers + hero + enemies sorted together by y for depth layering
   const walkers = [];
   for (const e of state.enemies) walkers.push({ y: e.y, kind: "enemy", ref: e });
   for (const t of state.towers)
     if (t.def.attack === "none")
       for (const s of t.soldiers) if (s.alive) walkers.push({ y: s.y, kind: "soldier", ref: s });
+  if (state.hero) {
+    const h = state.hero;
+    walkers.push({ y: h.alive ? h.y : h.commandPos.y, kind: "hero", ref: h });
+  }
   walkers.sort((a, b) => a.y - b.y);
-  for (const w of walkers) (w.kind === "enemy" ? drawEnemy : drawSoldier)(w.ref);
+  for (const w of walkers) {
+    if (w.kind === "enemy") drawEnemy(w.ref);
+    else if (w.kind === "soldier") drawSoldier(w.ref);
+    else drawHero(w.ref);
+  }
 
   for (const fx of state.effects) drawEffect(fx);
   for (const p of state.projectiles) drawProjectile(p);
@@ -292,6 +301,54 @@ function drawSoldier(s) {
   }
 }
 
+function drawHero(hero) {
+  if (!hero.alive) {
+    // downed: a small marker + countdown at the last commanded spot
+    const p = hero.commandPos;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 10, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(20,24,34,0.55)";
+    ctx.fill();
+    ctx.font = "13px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("💀", p.x, p.y - 1);
+    ctx.font = "bold 11px system-ui, sans-serif";
+    ctx.fillStyle = "#ffcf52";
+    ctx.fillText(Math.ceil(hero.respawn) + "s", p.x, p.y + 15);
+    return;
+  }
+
+  const r = 14;
+  if (state.heroSelected) {
+    // pulsing ring: click somewhere to send the hero there
+    const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 200);
+    ctx.beginPath();
+    ctx.arc(hero.x, hero.y, r + 6 + pulse * 2, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(90,209,165,${0.5 + 0.4 * pulse})`;
+    ctx.lineWidth = 2.5;
+    ctx.stroke();
+  }
+  groundShadow(hero.x + 2, hero.y + r * 0.7, r * 1.2, r * 0.5);
+  shadedSphere(hero.x, hero.y, r, HERO.colors.light, HERO.colors.mid, HERO.colors.dark);
+  ctx.beginPath();
+  ctx.arc(hero.x + LIGHT.x * r * 0.5, hero.y + LIGHT.y * r * 0.5, r * 0.2, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.55)";
+  ctx.fill();
+  // star marker distinguishes the hero from soldiers/enemies at a glance
+  ctx.font = "bold 13px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = "#4a2f06";
+  ctx.fillText("★", hero.x, hero.y - 1);
+
+  const w = 34, h = 5, pct = Math.max(0, hero.hp / hero.maxHp);
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  ctx.fillRect(hero.x - w / 2, hero.y - r - 13, w, h);
+  ctx.fillStyle = pct > 0.5 ? "#5ad1a5" : pct > 0.25 ? "#ffcf52" : "#ff6b6b";
+  ctx.fillRect(hero.x - w / 2, hero.y - r - 13, w * pct, h);
+}
+
 function drawEnemy(e) {
   const r = e.radius;
   const lift = e.flying ? 18 : 0;      // flyers hover above their ground shadow
@@ -402,6 +459,15 @@ function drawProjectile(p) {
 
 function drawEffect(fx) {
   const t = 1 - fx.life / fx.maxLife;
+  if (fx.kind === "ping") {
+    // hero move-command acknowledgement: a thin expanding ring, no fill
+    ctx.beginPath();
+    ctx.arc(fx.x, fx.y, fx.maxR * t, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(90,209,165,${0.8 * (1 - t)})`;
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    return;
+  }
   const r = fx.maxR * (0.4 + 0.6 * t);
   ctx.beginPath();
   ctx.arc(fx.x, fx.y, r, 0, Math.PI * 2);

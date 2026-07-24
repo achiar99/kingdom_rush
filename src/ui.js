@@ -9,7 +9,7 @@ import { LEVELS, WAVES } from "./data/levels.js";
 import { el } from "./dom.js";
 import { dist, nearestPointOnPath } from "./geometry.js";
 import { state, PATH, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
-import { makeTower, computeStats, upgradeCost, sellValue, relocateRally } from "./entities.js";
+import { makeTower, computeStats, upgradeCost, sellValue, relocateRally, makeHero, commandHero } from "./entities.js";
 import { canvas } from "./render.js";
 import { startNextWave } from "./simulation.js";
 import { markComplete, unlockLevel, exportProgress, importProgressFromFile, wipeProgress, getDifficulty } from "./save.js";
@@ -139,7 +139,8 @@ function sellTower(t) {
 canvas.addEventListener("mousemove", (ev) => {
   const { x, y } = canvasPos(ev);
   state.hoverSpot = BUILD_SPOTS.find((s) => dist(x, y, s.x, s.y) <= 18) || null;
-  canvas.style.cursor = state.hoverSpot ? "pointer" : "default";
+  const overHero = state.hero && state.hero.alive && dist(x, y, state.hero.x, state.hero.y) <= 20;
+  canvas.style.cursor = state.hoverSpot || overHero || state.heroSelected ? "pointer" : "default";
 });
 
 canvas.addEventListener("click", (ev) => {
@@ -160,9 +161,28 @@ canvas.addEventListener("click", (ev) => {
   }
 
   const spot = BUILD_SPOTS.find((s) => dist(x, y, s.x, s.y) <= 18);
-  if (!spot) { closeMenus(); return; }
-  if (spotOccupied(spot)) openManageMenu(state.towers.find((t) => t.spot === spot));
-  else openBuildMenu(spot);
+  if (spot) {
+    state.heroSelected = false;
+    if (spotOccupied(spot)) openManageMenu(state.towers.find((t) => t.spot === spot));
+    else openBuildMenu(spot);
+    return;
+  }
+
+  closeMenus();
+
+  // hero movement is two-step: click the hero to select it, then click
+  // wherever you want it to go. A ground click while nothing is selected
+  // does nothing (this used to move the hero on any click, which made it
+  // too easy to send it somewhere by accident while just clicking around).
+  const hero = state.hero;
+  if (!hero || !hero.alive) return;
+  if (state.heroSelected) {
+    commandHero(hero, x, y);
+    state.effects.push({ x, y, maxR: 26, life: 0.4, maxLife: 0.4, kind: "ping" });
+    state.heroSelected = false;
+  } else if (dist(x, y, hero.x, hero.y) <= 20) {
+    state.heroSelected = true;
+  }
 });
 
 // click anywhere else / Escape closes any open menu (or cancels repositioning)
@@ -173,6 +193,7 @@ document.addEventListener("click", (ev) => {
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   if (state.repositioning) { state.repositioning = null; setTip(""); }
+  state.heroSelected = false;
   closeMenus();
 });
 
@@ -189,6 +210,10 @@ export function updateHud() {
   el("gold").textContent = state.gold;
   el("lives").textContent = state.lives;
   el("wave").textContent = Math.max(0, state.waveIndex + 1);
+  const h = state.hero;
+  el("heroHp").textContent = !h ? "—"
+    : h.alive ? Math.ceil(h.hp) + "/" + h.maxHp
+    : "💀 " + Math.ceil(h.respawn) + "s";
   refreshManageMenu();
 }
 
@@ -266,14 +291,17 @@ el("slotsBtn").addEventListener("click", showSlotSelect);
 
 export function resetGame() {
   const diff = getDifficulty();
+  const endP = PATH[PATH.length - 1];
   Object.assign(state, {
     gold: Math.round(LEVEL.startGold * diff.goldMul),
     lives: Math.round(LEVEL.startLives * diff.livesMul),
     waveIndex: -1,
     enemies: [], towers: [], projectiles: [], effects: [],
+    hero: makeHero({ x: endP.x - 70, y: endP.y }), // starts guarding the castle
     spawnQueue: [], spawnTimer: 0,
     running: false, over: false, paused: false, speed: 1,
     hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
+    heroSelected: false,
   });
   el("levelName").textContent = LEVEL.name + " · " + diff.icon + " " + diff.name;
   el("speedBtn").textContent = "Speed: 1×";
