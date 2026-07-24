@@ -157,10 +157,16 @@ function updateBarracks(tower, dt) {
       s.respawn -= dt;
       if (s.respawn <= 0) {
         s.alive = true; s.hp = tower.soldierHp; s.maxHp = tower.soldierHp;
-        s.x = s.home.x; s.y = s.home.y; s.target = null; s.attackCd = 0;
+        s.x = s.home.x; s.y = s.home.y; s.target = null; s.attackCd = 0; s.sinceHit = 0;
       }
       continue;
     }
+
+    // passive regen once it's been a few seconds since this soldier last took a hit
+    s.sinceHit += dt;
+    if (s.sinceHit >= def.soldierRegenDelay && s.hp < s.maxHp)
+      s.hp = Math.min(s.maxHp, s.hp + def.soldierRegenRate * dt);
+
     // drop dead / out-of-range targets — leashed to the rally point, not the
     // tower itself, so relocating the rally moves the whole engagement area
     if (s.target && (s.target.dead || dist(tower.rally.x, tower.rally.y, s.target.x, s.target.y) > tower.range))
@@ -186,6 +192,7 @@ function updateBarracks(tower, dt) {
       s.target.attackCd -= dt;
       if (s.target.attackCd <= 0) {
         s.hp -= CONFIG.enemy.meleeDamage;
+        s.sinceHit = 0; // reset the regen clock — just took a hit
         s.target.attackCd = CONFIG.enemy.attackInterval;
         if (s.hp <= 0) { s.alive = false; s.respawn = def.soldierRespawn; s.target = null; }
       }
@@ -207,10 +214,15 @@ function updateHero(dt) {
     if (hero.respawn <= 0) {
       hero.alive = true; hero.hp = HERO.maxHp;
       hero.x = hero.commandPos.x; hero.y = hero.commandPos.y;
-      hero.target = null; hero.attackCd = 0;
+      hero.target = null; hero.attackCd = 0; hero.sinceHit = 0;
     }
     return;
   }
+
+  // passive regen once it's been a few seconds since the hero last took a hit
+  hero.sinceHit += dt;
+  if (hero.sinceHit >= HERO.regenDelay && hero.hp < hero.maxHp)
+    hero.hp = Math.min(hero.maxHp, hero.hp + HERO.regenRate * dt);
 
   // drop dead / too-far targets — leashed to the hero's OWN current position,
   // not a fixed point, since it roams instead of sitting at one tower
@@ -237,6 +249,7 @@ function updateHero(dt) {
     hero.target.attackCd -= dt;
     if (hero.target.attackCd <= 0) {
       hero.hp -= CONFIG.enemy.meleeDamage;
+      hero.sinceHit = 0; // reset the regen clock — just took a hit
       hero.target.attackCd = CONFIG.enemy.attackInterval;
       if (hero.hp <= 0) { hero.alive = false; hero.respawn = HERO.respawnTime; hero.target = null; }
     }

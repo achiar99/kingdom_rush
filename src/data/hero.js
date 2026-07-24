@@ -9,5 +9,7 @@ export const HERO = {
   maxHp: 220, damage: 20, attackInterval: 0.7,
   speed: 100, meleeRange: 22, aggroRadius: 140,
   respawnTime: 18,
+  regenDelay: 5,     // seconds out of combat before HP starts recovering
+  regenRate: 12,     // HP per second once regen is active
   colors: { light: "#fff4c2", mid: "#e0a83a", dark: "#8a5c14" },
 };

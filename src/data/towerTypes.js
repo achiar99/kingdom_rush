@@ -27,6 +27,7 @@ export const TOWER_TYPES = {
                                             // fixed, not level-scaled like `range`
     soldierCount: 3, soldierHp: 55, soldierDamage: 9,
     soldierAttackInterval: 0.8, soldierSpeed: 85, soldierRespawn: 7,
+    soldierRegenDelay: 5, soldierRegenRate: 3, // out-of-combat HP recovery
     meleeRange: 20,
     palette: { light: "#cfd6e6", mid: "#7a8296", dark: "#464d5e" },
   },

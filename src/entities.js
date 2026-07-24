@@ -67,7 +67,7 @@ export function makeSoldier(tower, i) {
   };
   return {
     home, x: home.x, y: home.y, hp: tower.soldierHp, maxHp: tower.soldierHp,
-    alive: true, respawn: 0, target: null, attackCd: 0,
+    alive: true, respawn: 0, target: null, attackCd: 0, sinceHit: 0,
   };
 }
 
@@ -91,7 +91,7 @@ export function makeHero(pos) {
   return {
     x: pos.x, y: pos.y, commandPos: { x: pos.x, y: pos.y },
     hp: HERO.maxHp, maxHp: HERO.maxHp,
-    alive: true, respawn: 0, target: null, attackCd: 0,
+    alive: true, respawn: 0, target: null, attackCd: 0, sinceHit: 0,
   };
 }
 
