@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tower Realm — Tower Defense</title>
+<style>
+  :root {
+    --bg: #1b1f2a;
+    --panel: #232838;
+    --ink: #e8ecf4;
+    --muted: #9aa4bd;
+    --gold: #ffcf52;
+    --accent: #5ad1a5;
+    --danger: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  #app {
+    display: flex; flex-direction: column; align-items: center;
+    min-height: 100%; padding: 16px; gap: 12px;
+  }
+  h1 { margin: 4px 0 0; font-size: 20px; letter-spacing: .5px; }
+  .sub { color: var(--muted); font-size: 13px; margin-bottom: 4px; }
+  #hud {
+    display: flex; gap: 18px; align-items: center;
+    background: var(--panel); padding: 10px 18px; border-radius: 10px;
+    font-variant-numeric: tabular-nums; font-size: 15px;
+  }
+  #hud .stat b { color: var(--gold); }
+  #hud .lives b { color: var(--danger); }
+  #hud .wave b { color: var(--accent); }
+  #stage {
+    position: relative;
+    border-radius: 12px; overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,.4);
+    width: min(900px, 100%);
+  }
+  canvas { display: block; width: 100%; height: auto; }
+  #controls { display: flex; gap: 10px; align-items: center; }
+  button {
+    background: var(--accent); color: #0c1a14; border: 0;
+    padding: 9px 16px; border-radius: 8px; font-weight: 600; font-size: 14px;
+    cursor: pointer;
+  }
+  button.secondary { background: var(--panel); color: var(--ink); }
+  button:disabled { opacity: .5; cursor: default; }
+  #tip { color: var(--muted); font-size: 13px; min-height: 18px; }
+
+  /* radial-ish build menu that pops up over a build spot */
+  #buildMenu {
+    position: absolute; display: none;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    background: rgba(20,24,34,.96);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 8px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5);
+  }
+  #buildMenu.show { display: grid; }
+  #buildMenu {
+    grid-template-columns: repeat(2, 92px); gap: 6px;
+  }
+  .tower-opt {
+    display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: var(--panel); color: var(--ink);
+    padding: 8px 6px; border-radius: 9px; cursor: pointer;
+    border: 1px solid rgba(255,255,255,.06); font-weight: 500;
+  }
+  .tower-opt:hover:not(:disabled) { border-color: var(--accent); }
+  .tower-opt .ic { font-size: 22px; line-height: 1; }
+  .tower-opt .nm { font-size: 12px; }
+  .tower-opt .ct { font-size: 12px; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .tower-opt:disabled { opacity: .45; cursor: default; }
+
+  /* manage menu for an existing tower (upgrade / sell) */
+  #towerMenu {
+    position: absolute; display: none;
+    transform: translate(-50%, -50%); z-index: 6;
+    background: rgba(20,24,34,.96);
+    border: 1px solid rgba(255,255,255,.12);
+    border-radius: 12px; padding: 10px;
+    box-shadow: 0 8px 30px rgba(0,0,0,.5);
+    min-width: 156px;
+  }
+  #towerMenu.show { display: flex; flex-direction: column; gap: 8px; }
+  #towerMenu .thead { font-size: 13px; color: var(--muted); text-align: center; }
+  #towerMenu .thead b { color: var(--ink); }
+  #towerMenu .stars { color: var(--gold); letter-spacing: 3px; font-size: 13px; margin-top: 2px; }
+  #towerMenu button { font-size: 13px; padding: 8px 10px; }
+  #towerMenu .up { background: var(--accent); color: #0c1a14; }
+  #towerMenu .sell { background: #3a2230; color: #ffb3c1; }
+  #towerMenu button:disabled { opacity: .45; cursor: default; }
+
+  #overlay {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center; flex-direction: column;
+    background: rgba(10,12,18,.82); text-align: center; gap: 10px; z-index: 10;
+  }
+  #overlay h2 { margin: 0; font-size: 34px; }
+  #overlay.show { display: flex; }
+
+  #legend { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center;
+    color: var(--muted); font-size: 12px; max-width: 900px; }
+  #legend b { color: var(--ink); }
+
+  #overlayBtns { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+
+  /* view toggling */
+  #mapScreen { display: none; flex-direction: column; align-items: center; gap: 12px; width: min(900px, 100%); }
+  #playView { display: flex; flex-direction: column; align-items: center; gap: 12px; width: min(900px, 100%); }
+  body.view-map #mapScreen { display: flex; }
+  body.view-map #playView { display: none; }
+
+  /* world map */
+  #mapBoard {
+    position: relative; width: min(900px, 100%); aspect-ratio: 900 / 560;
+    border-radius: 12px; overflow: hidden;
+    background:
+      radial-gradient(120% 100% at 20% 0%, #3a6b8c 0%, #294c66 55%, #1e3550 100%),
+      linear-gradient(160deg, #35617f, #22415a);
+    box-shadow: 0 10px 40px rgba(0,0,0,.45);
+  }
+  #mapTrail { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #mapNodes { position: absolute; inset: 0; }
+  .map-node {
+    position: absolute; transform: translate(-50%, -50%);
+    display: flex; flex-direction: column; align-items: center; gap: 5px;
+    background: none; border: 0; padding: 0; cursor: pointer;
+  }
+  .map-node .disc {
+    width: 58px; height: 58px; border-radius: 50%;
+    display: grid; place-items: center; font-size: 24px; font-weight: 700;
+    color: #10141c; background: radial-gradient(circle at 35% 30%, #ffe9a8, #ffcf52 60%, #d9a222);
+    border: 3px solid #fff3d0; box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  }
+  .map-node .label {
+    font-size: 13px; font-weight: 600; color: var(--ink);
+    background: rgba(16,20,28,.7); padding: 3px 9px; border-radius: 7px; white-space: nowrap;
+  }
+  .map-node .diff { font-size: 11px; color: var(--muted); }
+  .map-node.locked { cursor: default; }
+  .map-node.locked .disc {
+    background: radial-gradient(circle at 35% 30%, #6b7280, #3b414d 60%, #262b34);
+    border-color: #545b68; color: #aab2c4;
+  }
+  .map-node.locked .label { color: var(--muted); }
+  .map-node.done .disc { border-color: #5ad1a5; }
+  .map-node:not(.locked):hover .disc { transform: scale(1.08); transition: transform .1s; }
+  .map-node .badge { position: absolute; top: -6px; right: -6px; font-size: 15px; }
+
+  #saveControls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
+  #saveTip { color: var(--muted); font-size: 12px; min-height: 16px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>⚔️ Tower Realm</h1>
+
+  <!-- WORLD MAP / LEVEL SELECT -->
+  <div id="mapScreen">
+    <div class="sub">Choose a realm to defend.</div>
+    <div id="mapBoard">
+      <svg id="mapTrail" viewBox="0 0 900 560" preserveAspectRatio="none"></svg>
+      <div id="mapNodes"></div>
+    </div>
+    <div id="saveControls">
+      <button id="exportBtn" class="secondary">⬇ Export save</button>
+      <button id="importBtn" class="secondary">⬆ Import save</button>
+      <button id="wipeBtn" class="secondary">🗑 Erase progress</button>
+      <input id="importFile" type="file" accept="application/json,.json" hidden />
+      <span id="saveTip"></span>
+    </div>
+  </div>
+
+  <!-- GAMEPLAY VIEW -->
+  <div id="playView">
+    <div class="sub">Click a build spot to build · click a tower to upgrade or sell · stop the creeps before they reach the castle.</div>
+    <div id="hud">
+      <span class="stat lvl">🗺 <b id="levelName">—</b></span>
+      <span class="stat">💰 Gold <b id="gold">0</b></span>
+      <span class="stat lives">❤️ Lives <b id="lives">0</b></span>
+      <span class="stat wave">🌊 Wave <b id="wave">0</b>/<span id="waveMax">0</span></span>
+    </div>
+    <div id="stage">
+      <canvas id="game" width="900" height="560"></canvas>
+      <div id="buildMenu"></div>
+      <div id="towerMenu"></div>
+      <div id="overlay">
+        <h2 id="overlayTitle"></h2>
+        <div class="sub" id="overlaySub"></div>
+        <div id="overlayBtns"></div>
+      </div>
+    </div>
+    <div id="controls">
+      <button id="startBtn">Start wave</button>
+      <button id="speedBtn" class="secondary">Speed: 1×</button>
+      <button id="pauseBtn" class="secondary">⏸ Pause</button>
+      <button id="resetBtn" class="secondary">↺ Reset</button>
+      <button id="mapBtn" class="secondary">🗺 Map</button>
+      <span id="tip"></span>
+    </div>
+    <div id="legend">
+      <span>🏹 <b>Archer</b> — fast single-target, long range</span>
+      <span>💣 <b>Artillery</b> — slow splash damage</span>
+      <span>⚔️ <b>Barracks</b> — soldiers block the road</span>
+      <span>🔮 <b>Magic</b> — heavy single-target, pierces armor</span>
+    </div>
+    <div id="legend" class="enemies">
+      <span><b>Enemies:</b></span>
+      <span>⚡ <b>Runner</b> — fast</span>
+      <span>🛡️ <b>Armored</b> — resists all but Magic</span>
+      <span>🟫 <b>Tank</b> — slow, tough</span>
+      <span>🦇 <b>Flyer</b> — soldiers can't block</span>
+      <span>👑 <b>Boss</b> — final wave</span>
+    </div>
+  </div>
+</div>
+<script src="game.js"></script>
+</body>
+</html>
