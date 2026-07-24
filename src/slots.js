@@ -1,7 +1,9 @@
 // The save-slot picker: 3 independent playthroughs, each with its own level
-// progress. Shown at boot (unless a slot was already active last visit) and
-// reachable from the world map via the "Switch slot" button.
+// progress and a difficulty chosen once at creation. Shown at boot (unless a
+// slot was already active last visit) and reachable from the world map via
+// the "Switch slot" button.
 import { LEVELS } from "./data/levels.js";
+import { DIFFICULTIES, DIFFICULTY_LIST } from "./data/difficulties.js";
 import { el, setView } from "./dom.js";
 import { SLOT_COUNT, getSlotInfo, selectSlot, deleteSlot } from "./save.js";
 import { showMap } from "./worldmap.js";
@@ -26,9 +28,13 @@ export function renderSlotScreen() {
 
     const status = document.createElement("div");
     status.className = "slot-status";
-    status.textContent = info.exists
-      ? `${info.unlocked}/${LEVELS.length} realms unlocked · ${info.doneCount} completed`
-      : "Empty — start a new game";
+    if (info.exists) {
+      const diff = DIFFICULTIES[info.difficulty] || DIFFICULTIES.normal;
+      status.textContent =
+        `${diff.icon} ${diff.name} · ${info.unlocked}/${LEVELS.length} unlocked · ${info.doneCount} completed`;
+    } else {
+      status.textContent = "Empty — choose a difficulty to begin";
+    }
     card.appendChild(status);
 
     if (info.exists && info.updatedAt) {
@@ -41,12 +47,12 @@ export function renderSlotScreen() {
     const row = document.createElement("div");
     row.className = "slot-actions";
 
-    const playBtn = document.createElement("button");
-    playBtn.textContent = info.exists ? "▶ Play" : "▶ New game";
-    playBtn.addEventListener("click", () => { selectSlot(i); showMap(); });
-    row.appendChild(playBtn);
-
     if (info.exists) {
+      const playBtn = document.createElement("button");
+      playBtn.textContent = "▶ Play";
+      playBtn.addEventListener("click", () => { selectSlot(i); showMap(); });
+      row.appendChild(playBtn);
+
       const delBtn = document.createElement("button");
       delBtn.className = "secondary";
       delBtn.textContent = "🗑 Delete";
@@ -57,6 +63,17 @@ export function renderSlotScreen() {
         renderSlotScreen();
       });
       row.appendChild(delBtn);
+    } else {
+      // empty slot: pick a difficulty to create + start it in one step
+      for (const key of DIFFICULTY_LIST) {
+        const d = DIFFICULTIES[key];
+        const btn = document.createElement("button");
+        btn.className = "diff-btn diff-" + key;
+        btn.title = d.name;
+        btn.innerHTML = `${d.icon} ${d.name}`;
+        btn.addEventListener("click", () => { selectSlot(i, key); showMap(); });
+        row.appendChild(btn);
+      }
     }
 
     card.appendChild(row);

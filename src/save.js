@@ -6,6 +6,7 @@
 // reflects the change immediately). Safe circularity — see simulation.js
 // for why.
 import { LEVELS } from "./data/levels.js";
+import { DIFFICULTIES } from "./data/difficulties.js";
 import { el } from "./dom.js";
 import { renderMap } from "./worldmap.js";
 
@@ -16,9 +17,15 @@ const SAVE_VERSION = 1;
 
 const slotKey = (i) => `towerRealm.slot.${i}`;
 
-function defaultProgress() { return { unlocked: 1, done: [], updatedAt: null }; }
+// difficultyKey is chosen once, when a slot is first created (see selectSlot).
+function defaultProgress(difficultyKey) {
+  return {
+    unlocked: 1, done: [], updatedAt: null,
+    difficulty: DIFFICULTIES[difficultyKey] ? difficultyKey : "normal",
+  };
+}
 
-// Accepts a bare {unlocked,done} object OR a wrapped export file
+// Accepts a bare {unlocked,done,difficulty} object OR a wrapped export file
 // ({ app, version, progress }); returns null if the shape is unusable.
 function sanitizeProgress(raw) {
   if (!raw || typeof raw !== "object") return null;
@@ -27,7 +34,8 @@ function sanitizeProgress(raw) {
   const unlocked = Math.min(LEVELS.length, Math.max(1, Number(src.unlocked) || 1));
   const done = Array.isArray(src.done) ? src.done.filter((id) => validIds.has(id)) : [];
   const updatedAt = Number(src.updatedAt) || Date.now();
-  return { unlocked, done, updatedAt };
+  const difficulty = DIFFICULTIES[src.difficulty] ? src.difficulty : "normal";
+  return { unlocked, done, updatedAt, difficulty };
 }
 
 function readSlotRaw(i) {
@@ -61,7 +69,8 @@ export function getActiveSlot() {
 export function getSlotInfo(i) {
   const data = readSlotRaw(i);
   return data
-    ? { index: i, exists: true, unlocked: data.unlocked, doneCount: data.done.length, updatedAt: data.updatedAt }
+    ? { index: i, exists: true, unlocked: data.unlocked, doneCount: data.done.length,
+        updatedAt: data.updatedAt, difficulty: data.difficulty }
     : { index: i, exists: false };
 }
 
@@ -75,11 +84,14 @@ export function loadActiveSlotSilently(i) {
   progress = readSlotRaw(i) || defaultProgress();
 }
 
-// Explicit user action (clicking Play on the slot-select screen): remembers
-// this as the active slot for next time, and ensures a fresh slot is
-// actually written to disk immediately.
-export function selectSlot(i) {
-  loadActiveSlotSilently(i);
+// Explicit user action (clicking Play/New-game on the slot-select screen):
+// remembers this as the active slot for next time, and writes it to disk
+// immediately. `difficultyKey` only matters for a genuinely new slot — an
+// existing slot always keeps the difficulty it was created with.
+export function selectSlot(i, difficultyKey) {
+  const existing = readSlotRaw(i);
+  activeSlot = i;
+  progress = existing || defaultProgress(difficultyKey);
   localStorage.setItem(ACTIVE_KEY, String(i));
   saveProgress();
 }
@@ -87,6 +99,10 @@ export function selectSlot(i) {
 export function deleteSlot(i) {
   localStorage.removeItem(slotKey(i));
   if (i === activeSlot) progress = defaultProgress();
+}
+
+export function getDifficulty() {
+  return DIFFICULTIES[progress.difficulty] || DIFFICULTIES.normal;
 }
 
 function saveProgress() {
@@ -135,7 +151,7 @@ export function importProgressFromFile(file) {
 
 export function wipeProgress() {
   if (!confirm("Erase progress in Slot " + (activeSlot + 1) + "? This can't be undone.")) return;
-  progress = defaultProgress();
+  progress = defaultProgress(progress.difficulty); // keep the slot's difficulty, just reset progress
   saveProgress();
   renderMap();
   setSaveTip("Slot " + (activeSlot + 1) + " erased.");

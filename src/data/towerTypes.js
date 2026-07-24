@@ -20,9 +20,13 @@ export const TOWER_TYPES = {
   },
   barracks: {
     key: "barracks", name: "Barracks", icon: "⚔️", cost: 90,
-    attack: "none", range: 100,            // engagement radius for soldiers
-    soldierCount: 3, soldierHp: 65, soldierDamage: 11,
-    soldierAttackInterval: 0.8, soldierSpeed: 85, soldierRespawn: 5,
+    attack: "none", range: 70,             // soldier leash radius around the CURRENT
+                                            // rally point (combat engagement only)
+    rallyReach: 150,                       // max distance the rally point may be
+                                            // relocated from the tower's build spot —
+                                            // fixed, not level-scaled like `range`
+    soldierCount: 3, soldierHp: 55, soldierDamage: 9,
+    soldierAttackInterval: 0.8, soldierSpeed: 85, soldierRespawn: 7,
     meleeRange: 20,
     palette: { light: "#cfd6e6", mid: "#7a8296", dark: "#464d5e" },
   },

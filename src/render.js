@@ -89,6 +89,20 @@ export function render() {
     ctx.stroke();
   }
 
+  // allowed placement area while relocating a barracks' rally point
+  if (state.repositioning) {
+    const t = state.repositioning;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, t.def.rallyReach, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,207,82,0.12)";
+    ctx.fill();
+    ctx.setLineDash([6, 5]);
+    ctx.strokeStyle = "rgba(255,207,82,0.65)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
   if (state.paused && !state.over) drawPausedBanner();
 }
 

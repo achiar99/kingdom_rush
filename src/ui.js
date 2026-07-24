@@ -7,12 +7,12 @@ import { CONFIG, MAX_LEVEL } from "./config.js";
 import { TOWER_TYPES, TYPE_LIST } from "./data/towerTypes.js";
 import { LEVELS, WAVES } from "./data/levels.js";
 import { el } from "./dom.js";
-import { dist } from "./geometry.js";
-import { state, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
-import { makeTower, computeStats, upgradeCost, sellValue } from "./entities.js";
+import { dist, nearestPointOnPath } from "./geometry.js";
+import { state, PATH, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
+import { makeTower, computeStats, upgradeCost, sellValue, relocateRally } from "./entities.js";
 import { canvas } from "./render.js";
 import { startNextWave } from "./simulation.js";
-import { markComplete, unlockLevel, exportProgress, importProgressFromFile, wipeProgress } from "./save.js";
+import { markComplete, unlockLevel, exportProgress, importProgressFromFile, wipeProgress, getDifficulty } from "./save.js";
 import { showMap, startLevel } from "./worldmap.js";
 import { showSlotSelect } from "./slots.js";
 
@@ -85,6 +85,19 @@ function openManageMenu(tower) {
   up.addEventListener("click", (ev) => { ev.stopPropagation(); upgradeTower(tower); });
   towerMenu.appendChild(up);
 
+  if (tower.type === "barracks") {
+    const move = document.createElement("button");
+    move.className = "move";
+    move.textContent = "🚩 Move rally point";
+    move.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      closeManageMenu();
+      state.repositioning = tower;
+      setTip("Click inside the glowing circle to relocate the rally point. Esc to cancel.");
+    });
+    towerMenu.appendChild(move);
+  }
+
   const sell = document.createElement("button");
   sell.className = "sell";
   sell.textContent = `Sell  💰${sellValue(tower)}`;
@@ -132,18 +145,36 @@ canvas.addEventListener("mousemove", (ev) => {
 canvas.addEventListener("click", (ev) => {
   if (state.over) return;
   const { x, y } = canvasPos(ev);
+
+  if (state.repositioning) {
+    const tower = state.repositioning;
+    const snapped = nearestPointOnPath(PATH, x, y);
+    if (dist(tower.x, tower.y, snapped.x, snapped.y) <= tower.def.rallyReach) {
+      relocateRally(tower, snapped);
+      state.repositioning = null;
+      setTip("");
+    } else {
+      setTip("Too far — click somewhere inside the glowing circle.");
+    }
+    return;
+  }
+
   const spot = BUILD_SPOTS.find((s) => dist(x, y, s.x, s.y) <= 18);
   if (!spot) { closeMenus(); return; }
   if (spotOccupied(spot)) openManageMenu(state.towers.find((t) => t.spot === spot));
   else openBuildMenu(spot);
 });
 
-// click anywhere else / Escape closes any open menu
+// click anywhere else / Escape closes any open menu (or cancels repositioning)
 document.addEventListener("click", (ev) => {
   if (!buildMenu.contains(ev.target) && !towerMenu.contains(ev.target) && ev.target !== canvas)
     closeMenus();
 });
-document.addEventListener("keydown", (ev) => { if (ev.key === "Escape") closeMenus(); });
+document.addEventListener("keydown", (ev) => {
+  if (ev.key !== "Escape") return;
+  if (state.repositioning) { state.repositioning = null; setTip(""); }
+  closeMenus();
+});
 
 function canvasPos(ev) {
   const rect = canvas.getBoundingClientRect();
@@ -234,13 +265,17 @@ el("wipeBtn").addEventListener("click", wipeProgress);
 el("slotsBtn").addEventListener("click", showSlotSelect);
 
 export function resetGame() {
+  const diff = getDifficulty();
   Object.assign(state, {
-    gold: LEVEL.startGold, lives: LEVEL.startLives, waveIndex: -1,
+    gold: Math.round(LEVEL.startGold * diff.goldMul),
+    lives: Math.round(LEVEL.startLives * diff.livesMul),
+    waveIndex: -1,
     enemies: [], towers: [], projectiles: [], effects: [],
     spawnQueue: [], spawnTimer: 0,
-    running: false, over: false, paused: false, speed: 1, hoverSpot: null, menuSpot: null, selected: null,
+    running: false, over: false, paused: false, speed: 1,
+    hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
   });
-  el("levelName").textContent = LEVEL.name;
+  el("levelName").textContent = LEVEL.name + " · " + diff.icon + " " + diff.name;
   el("speedBtn").textContent = "Speed: 1×";
   el("pauseBtn").textContent = "⏸ Pause";
   el("overlay").classList.remove("show");

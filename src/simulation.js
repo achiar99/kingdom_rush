@@ -10,6 +10,7 @@ import { WAVES } from "./data/levels.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy } from "./entities.js";
+import { getDifficulty } from "./save.js";
 import { closeMenus, updateHud, updateButtons, setTip, endGame } from "./ui.js";
 
 export function startNextWave() {
@@ -17,13 +18,13 @@ export function startNextWave() {
   if (state.waveIndex + 1 >= WAVES.length) return;
   state.waveIndex++;
   const wave = WAVES[state.waveIndex];
+  const hpMul = wave.hpMul * LEVEL.hpScale * getDifficulty().hpMul;
   // flatten the wave's groups into an ordered queue of individual spawns,
   // each carrying its own gap (delay until the NEXT spawn) and wave scaling.
   state.spawnQueue = [];
   for (const g of wave.groups)
     for (let i = 0; i < g.count; i++)
-      state.spawnQueue.push({ type: g.type, gap: g.gap,
-        hpMul: wave.hpMul * LEVEL.hpScale, speedMul: wave.speedMul });
+      state.spawnQueue.push({ type: g.type, gap: g.gap, hpMul, speedMul: wave.speedMul });
   state.spawnTimer = 0;
   state.running = true;
   closeMenus();
@@ -155,15 +156,16 @@ function updateBarracks(tower, dt) {
       }
       continue;
     }
-    // drop dead / out-of-range targets
-    if (s.target && (s.target.dead || dist(tower.x, tower.y, s.target.x, s.target.y) > tower.range))
+    // drop dead / out-of-range targets — leashed to the rally point, not the
+    // tower itself, so relocating the rally moves the whole engagement area
+    if (s.target && (s.target.dead || dist(tower.rally.x, tower.rally.y, s.target.x, s.target.y) > tower.range))
       s.target = null;
     // acquire nearest ground enemy within engagement radius (flyers can't be blocked)
     if (!s.target) {
       let best = null, bestD = Infinity;
       for (const e of state.enemies) {
         if (e.dead || e.flying) continue;
-        const d = dist(tower.x, tower.y, e.x, e.y);
+        const d = dist(tower.rally.x, tower.rally.y, e.x, e.y);
         if (d <= tower.range && d < bestD) { best = e; bestD = d; }
       }
       s.target = best;

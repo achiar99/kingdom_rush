@@ -27,7 +27,7 @@ export const state = {
   enemies: [], towers: [], projectiles: [], effects: [],
   spawnQueue: [], spawnTimer: 0,
   running: false, over: false, paused: false, speed: 1,
-  hoverSpot: null, menuSpot: null, selected: null,
+  hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
 };
 
 export function spotOccupied(spot) {

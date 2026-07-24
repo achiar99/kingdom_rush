@@ -69,3 +69,20 @@ export function makeSoldier(tower, i) {
     alive: true, respawn: 0, target: null, attackCd: 0,
   };
 }
+
+// Relocate a barracks' rally point (player-chosen, within tower.range of the
+// tower — see ui.js's reposition mode). Soldiers abandon whatever they were
+// doing and redeploy around the new point immediately.
+export function relocateRally(tower, newRally) {
+  tower.rally = newRally;
+  tower.soldiers.forEach((s, i) => {
+    const angle = (i / tower.def.soldierCount) * Math.PI * 2;
+    s.home = {
+      x: newRally.x + Math.cos(angle) * 14,
+      y: newRally.y + Math.sin(angle) * 14,
+    };
+    s.target = null;
+    s.x = s.home.x;
+    s.y = s.home.y;
+  });
+}
