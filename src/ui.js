@@ -214,6 +214,15 @@ export function updateHud() {
   el("heroHp").textContent = !h ? "—"
     : h.alive ? Math.ceil(h.hp) + "/" + h.maxHp
     : "💀 " + Math.ceil(h.respawn) + "s";
+
+  const portrait = el("heroPortrait");
+  portrait.classList.toggle("downed", !!h && !h.alive);
+  portrait.classList.toggle("selected", state.heroSelected);
+  if (h) {
+    el("heroPortraitHp").style.width = Math.max(0, (h.hp / h.maxHp) * 100) + "%";
+    el("heroPortraitDowned").textContent = h.alive ? "" : "💀 " + Math.ceil(h.respawn) + "s";
+  }
+
   refreshManageMenu();
 }
 
@@ -299,6 +308,15 @@ el("importFile").addEventListener("change", (ev) => {
 });
 el("wipeBtn").addEventListener("click", wipeProgress);
 el("slotsBtn").addEventListener("click", showSlotSelect);
+
+// bottom-left hero portrait: selects the hero, same as clicking it on the
+// battlefield — a fixed, always-reachable stand-in for a unit that's small
+// and constantly moving around the map.
+el("heroPortrait").addEventListener("click", () => {
+  const hero = state.hero;
+  if (!hero || !hero.alive) return;
+  state.heroSelected = !state.heroSelected; // click again to cancel the selection
+});
 
 export function resetGame() {
   const diff = getDifficulty();
