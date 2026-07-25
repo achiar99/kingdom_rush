@@ -214,7 +214,7 @@ function updateHero(dt) {
     if (hero.respawn <= 0) {
       hero.alive = true; hero.hp = HERO.maxHp;
       hero.x = hero.commandPos.x; hero.y = hero.commandPos.y;
-      hero.target = null; hero.attackCd = 0; hero.sinceHit = 0;
+      hero.target = null; hero.attackCd = 0; hero.sinceHit = 0; hero.forcedMove = false;
     }
     return;
   }
@@ -224,23 +224,30 @@ function updateHero(dt) {
   if (hero.sinceHit >= HERO.regenDelay && hero.hp < hero.maxHp)
     hero.hp = Math.min(hero.maxHp, hero.hp + HERO.regenRate * dt);
 
-  // drop dead / too-far targets — leashed to the hero's OWN current position,
-  // not a fixed point, since it roams instead of sitting at one tower
-  if (hero.target && (hero.target.dead || dist(hero.x, hero.y, hero.target.x, hero.target.y) > HERO.aggroRadius))
-    hero.target = null;
-  // acquire nearest ground enemy within aggro radius (flyers can't be reached)
-  if (!hero.target) {
-    let best = null, bestD = Infinity;
-    for (const e of state.enemies) {
-      if (e.dead || e.flying) continue;
-      const d = dist(hero.x, hero.y, e.x, e.y);
-      if (d <= HERO.aggroRadius && d < bestD) { best = e; bestD = d; }
+  // While under orders (forcedMove), skip target-acquisition entirely — the
+  // hero ignores every enemy, not just the one it was just fighting, so a
+  // whole cluster of creeps can't keep grabbing its attention on the way.
+  // It resumes normal behavior once it actually reaches commandPos, below.
+  if (!hero.forcedMove) {
+    // drop dead / too-far targets — leashed to the hero's OWN current position,
+    // not a fixed point, since it roams instead of sitting at one tower
+    if (hero.target && (hero.target.dead || dist(hero.x, hero.y, hero.target.x, hero.target.y) > HERO.aggroRadius))
+      hero.target = null;
+    // acquire nearest ground enemy within aggro radius (flyers can't be reached)
+    if (!hero.target) {
+      let best = null, bestD = Infinity;
+      for (const e of state.enemies) {
+        if (e.dead || e.flying) continue;
+        const d = dist(hero.x, hero.y, e.x, e.y);
+        if (d <= HERO.aggroRadius && d < bestD) { best = e; bestD = d; }
+      }
+      hero.target = best;
     }
-    hero.target = best;
   }
 
   const dest = hero.target || hero.commandPos;
   const d = dist(hero.x, hero.y, dest.x, dest.y);
+  if (hero.forcedMove && d <= 1) hero.forcedMove = false; // arrived — resume normal behavior
   if (hero.target && d <= HERO.meleeRange) {
     // locked in melee: block the creep and trade blows
     hero.target.engaged = true;

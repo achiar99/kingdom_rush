@@ -92,11 +92,18 @@ export function makeHero(pos) {
     x: pos.x, y: pos.y, commandPos: { x: pos.x, y: pos.y },
     hp: HERO.maxHp, maxHp: HERO.maxHp,
     alive: true, respawn: 0, target: null, attackCd: 0, sinceHit: 0,
+    forcedMove: false,
   };
 }
 
-// Player clicked the battlefield: send the hero there. Doesn't interrupt a
-// fight already in progress (see updateHero) — it heads out once that's done.
+// Player clicked the battlefield: send the hero there — immediately, even if
+// it's mid-fight, and even if there's a whole wave of enemies clustered
+// around it that would otherwise give it something new to fight on the very
+// next tick. `forcedMove` suppresses ALL target-acquisition (not just a
+// grudge against the one enemy it was fighting) until it physically reaches
+// commandPos — see updateHero, which clears the flag on arrival.
 export function commandHero(hero, x, y) {
   hero.commandPos = { x, y };
+  hero.target = null;
+  hero.forcedMove = true;
 }
