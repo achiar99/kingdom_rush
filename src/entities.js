@@ -68,6 +68,7 @@ export function makeSoldier(tower, i) {
   return {
     home, x: home.x, y: home.y, hp: tower.soldierHp, maxHp: tower.soldierHp,
     alive: true, respawn: 0, target: null, attackCd: 0, sinceHit: 0,
+    forcedMove: false,
   };
 }
 
@@ -75,6 +76,9 @@ export function makeSoldier(tower, i) {
 // tower — see ui.js's reposition mode). Soldiers drop whatever they were
 // doing and walk to the new point at their normal speed (updateBarracks
 // handles the actual movement each frame) — they don't teleport there.
+// `forcedMove` suppresses ALL target-acquisition (same idea as the hero's
+// commandHero) so a cluster of nearby enemies can't keep grabbing a soldier's
+// attention on the way — it walks the whole distance before fighting again.
 export function relocateRally(tower, newRally) {
   tower.rally = newRally;
   tower.soldiers.forEach((s, i) => {
@@ -84,6 +88,7 @@ export function relocateRally(tower, newRally) {
       y: newRally.y + Math.sin(angle) * 14,
     };
     s.target = null;
+    s.forcedMove = true;
   });
 }
 

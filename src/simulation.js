@@ -158,6 +158,7 @@ function updateBarracks(tower, dt) {
       if (s.respawn <= 0) {
         s.alive = true; s.hp = tower.soldierHp; s.maxHp = tower.soldierHp;
         s.x = s.home.x; s.y = s.home.y; s.target = null; s.attackCd = 0; s.sinceHit = 0;
+        s.forcedMove = false;
       }
       continue;
     }
@@ -167,23 +168,30 @@ function updateBarracks(tower, dt) {
     if (s.sinceHit >= def.soldierRegenDelay && s.hp < s.maxHp)
       s.hp = Math.min(s.maxHp, s.hp + def.soldierRegenRate * dt);
 
-    // drop dead / out-of-range targets — leashed to the rally point, not the
-    // tower itself, so relocating the rally moves the whole engagement area
-    if (s.target && (s.target.dead || dist(tower.rally.x, tower.rally.y, s.target.x, s.target.y) > tower.range))
-      s.target = null;
-    // acquire nearest ground enemy within engagement radius (flyers can't be blocked)
-    if (!s.target) {
-      let best = null, bestD = Infinity;
-      for (const e of state.enemies) {
-        if (e.dead || e.flying) continue;
-        const d = dist(tower.rally.x, tower.rally.y, e.x, e.y);
-        if (d <= tower.range && d < bestD) { best = e; bestD = d; }
+    // While under orders (forcedMove, from a rally relocation), skip target-
+    // acquisition entirely — same idea as the hero's commandHero — so a
+    // whole cluster of creeps near the old spot can't keep grabbing this
+    // soldier's attention on the way to the new one. Resumes below on arrival.
+    if (!s.forcedMove) {
+      // drop dead / out-of-range targets — leashed to the rally point, not the
+      // tower itself, so relocating the rally moves the whole engagement area
+      if (s.target && (s.target.dead || dist(tower.rally.x, tower.rally.y, s.target.x, s.target.y) > tower.range))
+        s.target = null;
+      // acquire nearest ground enemy within engagement radius (flyers can't be blocked)
+      if (!s.target) {
+        let best = null, bestD = Infinity;
+        for (const e of state.enemies) {
+          if (e.dead || e.flying) continue;
+          const d = dist(tower.rally.x, tower.rally.y, e.x, e.y);
+          if (d <= tower.range && d < bestD) { best = e; bestD = d; }
+        }
+        s.target = best;
       }
-      s.target = best;
     }
 
     const dest = s.target || s.home;
     const d = dist(s.x, s.y, dest.x, dest.y);
+    if (s.forcedMove && d <= 1) s.forcedMove = false; // arrived — resume normal behavior
     if (s.target && d <= def.meleeRange) {
       // locked in melee: block the creep and trade blows
       s.target.engaged = true;
