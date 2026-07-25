@@ -6,10 +6,14 @@
 import { CONFIG, MAX_LEVEL } from "./config.js";
 import { TOWER_TYPES, TYPE_LIST } from "./data/towerTypes.js";
 import { LEVELS, WAVES } from "./data/levels.js";
+import { ABILITY_COOLDOWN, SUMMON, FIRE } from "./data/abilities.js";
 import { el } from "./dom.js";
 import { dist, nearestPointOnPath } from "./geometry.js";
 import { state, PATH, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
-import { makeTower, computeStats, upgradeCost, sellValue, relocateRally, makeHero, commandHero } from "./entities.js";
+import {
+  makeTower, computeStats, upgradeCost, sellValue, relocateRally,
+  makeHero, commandHero, makeSummonedSoldier,
+} from "./entities.js";
 import { canvas } from "./render.js";
 import { startNextWave } from "./simulation.js";
 import { markComplete, unlockLevel, exportProgress, importProgressFromFile, wipeProgress, getDifficulty } from "./save.js";
@@ -138,14 +142,39 @@ function sellTower(t) {
 // ---------------------------------------------------------------- input
 canvas.addEventListener("mousemove", (ev) => {
   const { x, y } = canvasPos(ev);
+  state.hoverPos = { x, y };
   state.hoverSpot = BUILD_SPOTS.find((s) => dist(x, y, s.x, s.y) <= 18) || null;
   const overHero = state.hero && state.hero.alive && dist(x, y, state.hero.x, state.hero.y) <= 20;
-  canvas.style.cursor = state.hoverSpot || overHero || state.heroSelected ? "pointer" : "default";
+  canvas.style.cursor = state.placingAbility || state.hoverSpot || overHero || state.heroSelected
+    ? "pointer" : "default";
 });
 
 canvas.addEventListener("click", (ev) => {
   if (state.over) return;
   const { x, y } = canvasPos(ev);
+
+  // ability placement takes priority over everything else — clicking
+  // anywhere on the field (even a build spot) commits the ability there
+  if (state.placingAbility === "soldiers") {
+    for (let i = 0; i < SUMMON.count; i++)
+      state.summonedSoldiers.push(makeSummonedSoldier({ x, y }, (i / SUMMON.count) * Math.PI * 2));
+    state.abilityCooldowns.soldiers = ABILITY_COOLDOWN;
+    state.placingAbility = null;
+    setTip("");
+    return;
+  }
+  if (state.placingAbility === "fire") {
+    for (const e of state.enemies) {
+      if (e.dead || dist(x, y, e.x, e.y) > FIRE.radius) continue;
+      e.burning = true;
+      e.burnFor = FIRE.duration;
+    }
+    state.effects.push({ x, y, maxR: FIRE.radius, life: 0.4, maxLife: 0.4 });
+    state.abilityCooldowns.fire = ABILITY_COOLDOWN;
+    state.placingAbility = null;
+    setTip("");
+    return;
+  }
 
   if (state.repositioning) {
     const tower = state.repositioning;
@@ -193,6 +222,7 @@ document.addEventListener("click", (ev) => {
 document.addEventListener("keydown", (ev) => {
   if (ev.key !== "Escape") return;
   if (state.repositioning) { state.repositioning = null; setTip(""); }
+  if (state.placingAbility) { state.placingAbility = null; setTip(""); }
   state.heroSelected = false;
   closeMenus();
 });
@@ -223,7 +253,17 @@ export function updateHud() {
     el("heroPortraitDowned").textContent = h.alive ? "" : "💀 " + Math.ceil(h.respawn) + "s";
   }
 
+  syncAbilityButton("abilitySoldiers", "abilitySoldiersCd", state.abilityCooldowns.soldiers);
+  syncAbilityButton("abilityFire", "abilityFireCd", state.abilityCooldowns.fire);
+
   refreshManageMenu();
+}
+
+// Grey out an ability square and show a countdown while it's on cooldown.
+function syncAbilityButton(btnId, cdId, cooldown) {
+  const onCooldown = cooldown > 0;
+  el(btnId).classList.toggle("cooling", onCooldown);
+  el(cdId).textContent = onCooldown ? Math.ceil(cooldown) + "s" : "";
 }
 
 // Keep the open manage-menu's Upgrade button in sync as gold changes live
@@ -318,6 +358,27 @@ el("heroPortrait").addEventListener("click", () => {
   state.heroSelected = !state.heroSelected; // click again to cancel the selection
 });
 
+// Both ability squares arm a "placement" mode instead of casting instantly —
+// the actual effect happens wherever the player clicks next (see the canvas
+// click handler above, which checks state.placingAbility first).
+el("abilitySoldiers").addEventListener("click", () => {
+  if (state.abilityCooldowns.soldiers > 0) return;
+  state.repositioning = null;
+  state.heroSelected = false;
+  closeMenus();
+  state.placingAbility = "soldiers";
+  setTip("Click where to send in reinforcements. Esc to cancel.");
+});
+
+el("abilityFire").addEventListener("click", () => {
+  if (state.abilityCooldowns.fire > 0) return;
+  state.repositioning = null;
+  state.heroSelected = false;
+  closeMenus();
+  state.placingAbility = "fire";
+  setTip("Click where to set enemies ablaze. Esc to cancel.");
+});
+
 export function resetGame() {
   const diff = getDifficulty();
   const endP = PATH[PATH.length - 1];
@@ -327,10 +388,11 @@ export function resetGame() {
     waveIndex: -1,
     enemies: [], towers: [], projectiles: [], effects: [],
     hero: makeHero({ x: endP.x - 70, y: endP.y }), // starts guarding the castle
+    summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
     spawnQueue: [], spawnTimer: 0,
     running: false, over: false, paused: false, speed: 1,
     hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
-    heroSelected: false,
+    heroSelected: false, placingAbility: null, hoverPos: null,
   });
   el("levelName").textContent = LEVEL.name + " · " + diff.icon + " " + diff.name;
   el("speedBtn").textContent = "Speed: 1×";

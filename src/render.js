@@ -3,6 +3,7 @@
 import { CONFIG } from "./config.js";
 import { TOWER_TYPES } from "./data/towerTypes.js";
 import { HERO } from "./data/hero.js";
+import { SUMMON, FIRE } from "./data/abilities.js";
 import { state, PATH, BUILD_SPOTS, THEME, spotOccupied } from "./state.js";
 import { acquireTarget } from "./simulation.js";
 
@@ -63,6 +64,7 @@ export function render() {
   for (const t of state.towers)
     if (t.def.attack === "none")
       for (const s of t.soldiers) if (s.alive) walkers.push({ y: s.y, kind: "soldier", ref: s });
+  for (const s of state.summonedSoldiers) if (s.alive) walkers.push({ y: s.y, kind: "summon", ref: s });
   if (state.hero) {
     const h = state.hero;
     walkers.push({ y: h.alive ? h.y : h.commandPos.y, kind: "hero", ref: h });
@@ -71,6 +73,7 @@ export function render() {
   for (const w of walkers) {
     if (w.kind === "enemy") drawEnemy(w.ref);
     else if (w.kind === "soldier") drawSoldier(w.ref);
+    else if (w.kind === "summon") drawSummonedSoldier(w.ref);
     else drawHero(w.ref);
   }
 
@@ -110,6 +113,32 @@ export function render() {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.setLineDash([]);
+  }
+
+  // preview for the two targeted hero abilities, following the cursor
+  if (state.placingAbility && state.hoverPos) {
+    const { x, y } = state.hoverPos;
+    if (state.placingAbility === "fire") {
+      ctx.beginPath();
+      ctx.arc(x, y, FIRE.radius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255,120,40,0.14)";
+      ctx.fill();
+      ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = "rgba(255,140,60,0.75)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    } else if (state.placingAbility === "soldiers") {
+      ctx.beginPath();
+      ctx.arc(x, y, 22, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(90,209,165,0.14)";
+      ctx.fill();
+      ctx.setLineDash([5, 4]);
+      ctx.strokeStyle = "rgba(90,209,165,0.75)";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
   }
 
   if (state.paused && !state.over) drawPausedBanner();
@@ -301,6 +330,24 @@ function drawSoldier(s) {
   }
 }
 
+// "Reinforcements" ability units — same silhouette as a Barracks soldier but
+// tinted green, so a temporary summon reads as distinct from a permanent one
+function drawSummonedSoldier(s) {
+  groundShadow(s.x + 1, s.y + 6, 9, 4);
+  shadedSphere(s.x, s.y, 7, SUMMON.colors.light, SUMMON.colors.mid, SUMMON.colors.dark);
+  ctx.beginPath();
+  ctx.arc(s.x + LIGHT.x * 3, s.y + LIGHT.y * 3, 1.8, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,0.6)";
+  ctx.fill();
+  const w = 16, h = 3, pct = Math.max(0, s.hp / s.maxHp);
+  if (pct < 1) {
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(s.x - w / 2, s.y - 14, w, h);
+    ctx.fillStyle = "#5ad1a5";
+    ctx.fillRect(s.x - w / 2, s.y - 14, w * pct, h);
+  }
+}
+
 function drawHero(hero) {
   if (!hero.alive) {
     // downed: a small marker + countdown at the last commanded spot
@@ -376,6 +423,7 @@ function drawEnemy(e) {
 
   if (e.armor) drawArmor(e.x, cy, r);
   if (e.boss) drawCrown(e.x, cy, r);
+  if (e.burning) drawBurning(e.x, cy, r);
 
   // hp bar (width scales with size)
   const w = Math.max(24, r * 2), h = e.boss ? 6 : 4;
@@ -384,6 +432,22 @@ function drawEnemy(e) {
   ctx.fillRect(e.x - w / 2, cy - r - 12, w, h);
   ctx.fillStyle = pct > 0.5 ? "#5ad1a5" : pct > 0.25 ? "#ffcf52" : "#ff6b6b";
   ctx.fillRect(e.x - w / 2, cy - r - 12, w * pct, h);
+}
+
+function drawBurning(x, y, r) {
+  // a warm glow plus a flickering flame glyph riding on top of the body
+  const flicker = 0.5 + 0.5 * Math.sin(performance.now() / 70);
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r * 1.3);
+  g.addColorStop(0, `rgba(255,140,40,${0.28 + 0.12 * flicker})`);
+  g.addColorStop(1, "rgba(255,90,20,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.font = (12 + flicker * 2) + "px system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("🔥", x, y - r - 2);
 }
 
 function drawWings(x, y, r) {

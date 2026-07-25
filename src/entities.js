@@ -3,6 +3,7 @@ import { SELL_REFUND } from "./config.js";
 import { ENEMY_TYPES } from "./data/enemyTypes.js";
 import { TOWER_TYPES } from "./data/towerTypes.js";
 import { HERO } from "./data/hero.js";
+import { SUMMON } from "./data/abilities.js";
 import { nearestPointOnPath } from "./geometry.js";
 import { state, PATH } from "./state.js";
 
@@ -111,4 +112,15 @@ export function commandHero(hero, x, y) {
   hero.commandPos = { x, y };
   hero.target = null;
   hero.forcedMove = true;
+}
+
+// "Reinforcements" ability: a temporary soldier that fights like a Barracks
+// soldier but has no tower, no rally leash and no respawn — it just expires
+// (`life` counts down in updateSummonedSoldiers) 7 seconds after arriving.
+export function makeSummonedSoldier(pos, angle) {
+  const home = { x: pos.x + Math.cos(angle) * 16, y: pos.y + Math.sin(angle) * 16 };
+  return {
+    home, x: home.x, y: home.y, hp: SUMMON.hp, maxHp: SUMMON.hp,
+    alive: true, target: null, attackCd: 0, life: SUMMON.lifespan,
+  };
 }

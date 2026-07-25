@@ -44,19 +44,22 @@
     width: min(900px, 100%);
   }
 
-  /* hero portrait: bottom-left shortcut for selecting the hero, same effect
-     as clicking the hero unit on the battlefield */
-  #heroPortrait {
-    position: absolute; left: 10px; bottom: 10px; z-index: 4;
+  /* bottom-left action bar: hero portrait + ability squares, all the same
+     footprint so they read as one control cluster */
+  #abilityBar { position: absolute; left: 10px; bottom: 10px; z-index: 4; display: flex; gap: 8px; }
+  #abilityBar button {
+    position: relative;
     width: 58px; height: 58px; border-radius: 10px; padding: 0;
     background: linear-gradient(160deg, #4a3a12, #241b08);
     border: 2px solid #e0a83a; cursor: pointer;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 4px 14px rgba(0,0,0,.45);
   }
-  #heroPortrait:hover { border-color: #ffcf52; }
+  #abilityBar button:hover { border-color: #ffcf52; }
+  #abilityBar .icon { font-size: 26px; line-height: 1; }
+
+  /* hero portrait specifics: selection glow, HP bar, downed state */
   #heroPortrait.selected { border-color: #5ad1a5; box-shadow: 0 0 0 3px rgba(90,209,165,.4); }
-  #heroPortrait .icon { font-size: 26px; line-height: 1; }
   #heroPortrait .hp-bar {
     position: absolute; left: 5px; right: 5px; bottom: 5px; height: 4px;
     background: rgba(0,0,0,.55); border-radius: 2px; overflow: hidden;
@@ -69,6 +72,15 @@
     font-size: 12px; font-weight: 700; color: var(--gold);
   }
   #heroPortrait.downed .downed-label { display: flex; }
+
+  /* ability squares: greyed out + countdown while on cooldown */
+  .ability-btn.cooling { cursor: default; border-color: #545b68; }
+  .ability-btn.cooling .icon { opacity: .3; }
+  .ability-btn .cd-label {
+    position: absolute; inset: 0; display: none; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 700; color: var(--ink); background: rgba(10,12,18,.55); border-radius: 8px;
+  }
+  .ability-btn.cooling .cd-label { display: flex; }
   canvas { display: block; width: 100%; height: auto; }
   #controls { display: flex; gap: 10px; align-items: center; }
   button {
@@ -251,11 +263,21 @@
       <canvas id="game" width="900" height="560"></canvas>
       <div id="buildMenu"></div>
       <div id="towerMenu"></div>
-      <button id="heroPortrait" title="Select hero">
-        <span class="icon">🦸</span>
-        <div class="hp-bar"><div class="hp-fill" id="heroPortraitHp"></div></div>
-        <div class="downed-label" id="heroPortraitDowned"></div>
-      </button>
+      <div id="abilityBar">
+        <button id="heroPortrait" title="Select hero">
+          <span class="icon">🦸</span>
+          <div class="hp-bar"><div class="hp-fill" id="heroPortraitHp"></div></div>
+          <div class="downed-label" id="heroPortraitDowned"></div>
+        </button>
+        <button id="abilitySoldiers" class="ability-btn" title="Call in 2 soldiers for 7s (15s cooldown)">
+          <span class="icon">⚔️</span>
+          <div class="cd-label" id="abilitySoldiersCd"></div>
+        </button>
+        <button id="abilityFire" class="ability-btn" title="Set all enemies on fire (15s cooldown)">
+          <span class="icon">🔥</span>
+          <div class="cd-label" id="abilityFireCd"></div>
+        </button>
+      </div>
       <div id="overlay">
         <h2 id="overlayTitle"></h2>
         <div class="sub" id="overlaySub"></div>

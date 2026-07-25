@@ -8,6 +8,7 @@
 import { CONFIG } from "./config.js";
 import { WAVES } from "./data/levels.js";
 import { HERO } from "./data/hero.js";
+import { FIRE, SUMMON } from "./data/abilities.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy } from "./entities.js";
@@ -58,11 +59,27 @@ export function update(dt) {
     }
   }
 
+  // ability cooldowns tick down regardless of anything else happening
+  if (state.abilityCooldowns.soldiers > 0) state.abilityCooldowns.soldiers -= dt;
+  if (state.abilityCooldowns.fire > 0) state.abilityCooldowns.fire -= dt;
+
+  // Ignite's burn: damage over time, ignores armor (like Magic), independent
+  // of position — it doesn't care where the enemy has wandered to since.
+  for (const e of state.enemies) {
+    if (e.dead || !e.burning) continue;
+    damageEnemy(e, FIRE.dps * dt, true);
+    e.burnFor -= dt;
+    if (e.burnFor <= 0) e.burning = false;
+  }
+
   // reset per-frame engagement flags; barracks soldiers re-set them
   for (const e of state.enemies) e.engaged = false;
 
   // barracks soldiers: acquire, move, melee, block
   for (const t of state.towers) if (t.def.attack === "none") updateBarracks(t, dt);
+
+  // "Reinforcements" ability: temporary soldiers, gone after their lifespan
+  updateSummonedSoldiers(dt);
 
   // the hero: acquire, move, melee, block (same shape as a barracks soldier,
   // but roams freely instead of being tied to a tower)
@@ -136,6 +153,48 @@ function onProjectileHit(p) {
   } else {
     damageEnemy(p.target, p.damage, p.magic);
   }
+}
+
+// "Reinforcements" ability units — combat is the same shape as a Barracks
+// soldier (acquire nearest ground target, melee, block) but anchored to
+// their own spawn point instead of a tower's rally, no respawn, and removed
+// outright once `life` runs out regardless of whether they're mid-fight.
+function updateSummonedSoldiers(dt) {
+  for (const s of state.summonedSoldiers) {
+    s.life -= dt;
+    if (!s.alive) continue;
+
+    if (s.target && (s.target.dead || dist(s.x, s.y, s.target.x, s.target.y) > SUMMON.aggroRadius))
+      s.target = null;
+    if (!s.target) {
+      let best = null, bestD = Infinity;
+      for (const e of state.enemies) {
+        if (e.dead || e.flying) continue;
+        const d = dist(s.x, s.y, e.x, e.y);
+        if (d <= SUMMON.aggroRadius && d < bestD) { best = e; bestD = d; }
+      }
+      s.target = best;
+    }
+
+    const dest = s.target || s.home;
+    const d = dist(s.x, s.y, dest.x, dest.y);
+    if (s.target && d <= SUMMON.meleeRange) {
+      s.target.engaged = true;
+      s.attackCd -= dt;
+      if (s.attackCd <= 0) { damageEnemy(s.target, SUMMON.damage); s.attackCd = SUMMON.attackInterval; }
+      s.target.attackCd -= dt;
+      if (s.target.attackCd <= 0) {
+        s.hp -= CONFIG.enemy.meleeDamage;
+        s.target.attackCd = CONFIG.enemy.attackInterval;
+        if (s.hp <= 0) s.alive = false;
+      }
+    } else if (d > 1) {
+      const step = SUMMON.speed * dt;
+      s.x += ((dest.x - s.x) / d) * Math.min(step, d);
+      s.y += ((dest.y - s.y) / d) * Math.min(step, d);
+    }
+  }
+  state.summonedSoldiers = state.summonedSoldiers.filter((s) => s.life > 0);
 }
 
 // target the enemy furthest along the path that's within range
