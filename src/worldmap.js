@@ -7,7 +7,7 @@
 import { LEVELS } from "./data/levels.js";
 import { el, setView } from "./dom.js";
 import { state, loadLevel } from "./state.js";
-import { progress } from "./save.js";
+import { progress, getStars } from "./save.js";
 import { closeMenus, resetGame } from "./ui.js";
 
 export function showMap() {
@@ -36,14 +36,17 @@ export function renderMap() {
   LEVELS.forEach((lv, i) => {
     const unlocked = i < progress.unlocked;
     const done = progress.done.includes(lv.id);
+    const stars = getStars(lv.id);
     const btn = document.createElement("button");
     btn.className = "map-node" + (unlocked ? "" : " locked") + (done ? " done" : "");
     btn.style.left = lv.node.x + "%";
     btn.style.top = lv.node.y + "%";
     const disc = unlocked ? (i + 1) : "🔒";
+    const starsRow = done
+      ? `<div class="node-stars">${"★".repeat(stars)}${"☆".repeat(3 - stars)}</div>` : "";
     btn.innerHTML =
-      `<div class="disc">${disc}${done ? '<span class="badge">✅</span>' : ""}</div>` +
-      `<div class="label">${lv.name}</div><div class="diff">${lv.difficulty}</div>`;
+      `<div class="disc">${disc}</div>` +
+      `<div class="label">${lv.name}</div><div class="diff">${lv.difficulty}</div>${starsRow}`;
     if (unlocked) btn.addEventListener("click", () => startLevel(i));
     nodes.appendChild(btn);
   });

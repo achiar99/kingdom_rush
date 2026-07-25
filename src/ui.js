@@ -238,16 +238,27 @@ export function updateButtons() {
 
 export function setTip(msg) { el("tip").textContent = msg; }
 
+// Star rating is based on % of that playthrough's starting lives left at the
+// end — thresholds scale with the level/difficulty's actual life total
+// instead of a fixed number, so e.g. Emberfall (18 lives) or Hard (×0.8)
+// rate fairly against the same bar as a standard 20-life Normal run.
+function starsForRun() {
+  const startingLives = Math.round(LEVEL.startLives * getDifficulty().livesMul);
+  const pct = state.lives / startingLives;
+  return pct >= 0.9 ? 3 : pct >= 0.55 ? 2 : 1;
+}
+
 export function endGame(won) {
   state.over = true;
   state.running = false;
   closeMenus();
   const nextIdx = LEVEL.index + 1;
-  if (won) { markComplete(LEVEL.id); unlockLevel(nextIdx); }
+  const stars = won ? starsForRun() : 0;
+  if (won) { markComplete(LEVEL.id, stars); unlockLevel(nextIdx); }
 
   el("overlayTitle").textContent = won ? "🏆 Victory!" : "💀 Defeated";
   el("overlaySub").textContent = won
-    ? LEVEL.name + " defended against every wave!"
+    ? LEVEL.name + " defended against every wave! " + "★".repeat(stars) + "☆".repeat(3 - stars)
     : "The creeps overran " + LEVEL.name + ".";
 
   const btns = el("overlayBtns");

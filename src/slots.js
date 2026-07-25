@@ -31,7 +31,8 @@ export function renderSlotScreen() {
     if (info.exists) {
       const diff = DIFFICULTIES[info.difficulty] || DIFFICULTIES.normal;
       status.textContent =
-        `${diff.icon} ${diff.name} · ${info.unlocked}/${LEVELS.length} unlocked · ${info.doneCount} completed`;
+        `${diff.icon} ${diff.name} · ${info.unlocked}/${LEVELS.length} unlocked · ` +
+        `${info.doneCount} completed · ${info.totalStars}★`;
     } else {
       status.textContent = "Empty — choose a difficulty to begin";
     }

@@ -22,11 +22,12 @@ function defaultProgress(difficultyKey) {
   return {
     unlocked: 1, done: [], updatedAt: null,
     difficulty: DIFFICULTIES[difficultyKey] ? difficultyKey : "normal",
+    stars: {}, // { [levelId]: 1|2|3 } — best star rating ever earned per level
   };
 }
 
-// Accepts a bare {unlocked,done,difficulty} object OR a wrapped export file
-// ({ app, version, progress }); returns null if the shape is unusable.
+// Accepts a bare {unlocked,done,difficulty,stars} object OR a wrapped export
+// file ({ app, version, progress }); returns null if the shape is unusable.
 function sanitizeProgress(raw) {
   if (!raw || typeof raw !== "object") return null;
   const src = raw.progress && typeof raw.progress === "object" ? raw.progress : raw;
@@ -35,7 +36,14 @@ function sanitizeProgress(raw) {
   const done = Array.isArray(src.done) ? src.done.filter((id) => validIds.has(id)) : [];
   const updatedAt = Number(src.updatedAt) || Date.now();
   const difficulty = DIFFICULTIES[src.difficulty] ? src.difficulty : "normal";
-  return { unlocked, done, updatedAt, difficulty };
+  const starsRaw = src.stars && typeof src.stars === "object" ? src.stars : {};
+  const stars = {};
+  for (const id of Object.keys(starsRaw)) {
+    if (!validIds.has(id)) continue;
+    const n = Math.round(Number(starsRaw[id]));
+    if (n >= 1 && n <= 3) stars[id] = n;
+  }
+  return { unlocked, done, updatedAt, difficulty, stars };
 }
 
 function readSlotRaw(i) {
@@ -70,7 +78,8 @@ export function getSlotInfo(i) {
   const data = readSlotRaw(i);
   return data
     ? { index: i, exists: true, unlocked: data.unlocked, doneCount: data.done.length,
-        updatedAt: data.updatedAt, difficulty: data.difficulty }
+        updatedAt: data.updatedAt, difficulty: data.difficulty,
+        totalStars: Object.values(data.stars).reduce((a, b) => a + b, 0) }
     : { index: i, exists: false };
 }
 
@@ -111,7 +120,14 @@ function saveProgress() {
   try { localStorage.setItem(slotKey(activeSlot), JSON.stringify(progress)); } catch (e) {}
 }
 
-export function markComplete(id) { if (!progress.done.includes(id)) progress.done.push(id); saveProgress(); }
+// stars is optional — pass it whenever a level was just won to record (and
+// only ever improve) the best rating earned for it.
+export function markComplete(id, stars) {
+  if (!progress.done.includes(id)) progress.done.push(id);
+  if (stars) progress.stars[id] = Math.max(progress.stars[id] || 0, stars);
+  saveProgress();
+}
+export function getStars(id) { return progress.stars[id] || 0; }
 export function unlockLevel(idx) {
   if (idx < LEVELS.length && idx + 1 > progress.unlocked) { progress.unlocked = idx + 1; saveProgress(); }
 }
