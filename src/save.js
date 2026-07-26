@@ -17,12 +17,19 @@ const SAVE_VERSION = 1;
 
 const slotKey = (i) => `towerRealm.slot.${i}`;
 
+// Upgrade-store track keys — mirrors TRACKS in data/store.js (kept as a
+// literal here so sanitizing at module-load time never races the circular
+// store.js → save.js import).
+const UPGRADE_KEYS = ["archer", "artillery", "magic", "barracks", "summon", "fire"];
+const UPGRADE_MAX_RANK = 3;
+
 // difficultyKey is chosen once, when a slot is first created (see selectSlot).
 function defaultProgress(difficultyKey) {
   return {
     unlocked: 1, done: [], updatedAt: null,
     difficulty: DIFFICULTIES[difficultyKey] ? difficultyKey : "normal",
-    stars: {}, // { [levelId]: 1|2|3 } — best star rating ever earned per level
+    stars: {},    // { [levelId]: 1|2|3 } — best star rating ever earned per level
+    upgrades: {}, // { [trackKey]: rank } — star Upgrade Store purchases
   };
 }
 
@@ -43,7 +50,13 @@ function sanitizeProgress(raw) {
     const n = Math.round(Number(starsRaw[id]));
     if (n >= 1 && n <= 3) stars[id] = n;
   }
-  return { unlocked, done, updatedAt, difficulty, stars };
+  const upgRaw = src.upgrades && typeof src.upgrades === "object" ? src.upgrades : {};
+  const upgrades = {};
+  for (const key of UPGRADE_KEYS) {
+    const n = Math.round(Number(upgRaw[key]));
+    if (n >= 1) upgrades[key] = Math.min(UPGRADE_MAX_RANK, n);
+  }
+  return { unlocked, done, updatedAt, difficulty, stars, upgrades };
 }
 
 function readSlotRaw(i) {
@@ -114,7 +127,7 @@ export function getDifficulty() {
   return DIFFICULTIES[progress.difficulty] || DIFFICULTIES.normal;
 }
 
-function saveProgress() {
+export function saveProgress() {
   if (activeSlot === null) return;
   progress.updatedAt = Date.now();
   try { localStorage.setItem(slotKey(activeSlot), JSON.stringify(progress)); } catch (e) {}

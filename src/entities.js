@@ -4,6 +4,7 @@ import { ENEMY_TYPES } from "./data/enemyTypes.js";
 import { TOWER_TYPES } from "./data/towerTypes.js";
 import { HERO } from "./data/hero.js";
 import { SUMMON } from "./data/abilities.js";
+import { towerDamageMul, splashRadiusMul, soldierHpMul, soldierDamageMul, summonHpMul } from "./data/store.js";
 import { nearestPointOnPath } from "./geometry.js";
 import { state, PATH } from "./state.js";
 
@@ -41,19 +42,20 @@ export function makeTower(spot, typeKey) {
   return t;
 }
 
-// Derive a tower's live stats from its base def and current level. Called on
-// build and after each upgrade so all combat code can read t.range/t.damage/etc.
+// Derive a tower's live stats from its base def, current level and the star
+// store's permanent bonuses. Called on build and after each upgrade so all
+// combat code can read t.range/t.damage/etc.
 export function computeStats(t) {
   const d = t.def, m = t.level - 1;
   t.range = d.range * (1 + 0.12 * m);
   if (d.attack !== "none") {
-    t.damage = Math.round(d.damage * (1 + 0.45 * m));
+    t.damage = Math.round(d.damage * (1 + 0.45 * m) * towerDamageMul(t.type));
     t.fireRate = d.fireRate * (1 + 0.15 * m);
     t.projectileSpeed = d.projectileSpeed;
-    t.splashRadius = d.splashRadius ? d.splashRadius * (1 + 0.12 * m) : 0;
+    t.splashRadius = d.splashRadius ? d.splashRadius * (1 + 0.12 * m) * splashRadiusMul() : 0;
   } else {
-    t.soldierHp = Math.round(d.soldierHp * (1 + 0.4 * m));
-    t.soldierDamage = Math.round(d.soldierDamage * (1 + 0.45 * m));
+    t.soldierHp = Math.round(d.soldierHp * (1 + 0.4 * m) * soldierHpMul());
+    t.soldierDamage = Math.round(d.soldierDamage * (1 + 0.45 * m) * soldierDamageMul());
   }
 }
 
@@ -119,8 +121,9 @@ export function commandHero(hero, x, y) {
 // (`life` counts down in updateSummonedSoldiers) 7 seconds after arriving.
 export function makeSummonedSoldier(pos, angle) {
   const home = { x: pos.x + Math.cos(angle) * 16, y: pos.y + Math.sin(angle) * 16 };
+  const hp = Math.round(SUMMON.hp * summonHpMul());
   return {
-    home, x: home.x, y: home.y, hp: SUMMON.hp, maxHp: SUMMON.hp,
+    home, x: home.x, y: home.y, hp, maxHp: hp,
     alive: true, target: null, attackCd: 0, life: SUMMON.lifespan,
   };
 }

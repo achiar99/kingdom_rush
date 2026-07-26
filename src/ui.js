@@ -5,7 +5,9 @@
 // back from ui.js. Safe circularity — see simulation.js for why.
 import { CONFIG, MAX_LEVEL } from "./config.js";
 import { TOWER_TYPES, TYPE_LIST } from "./data/towerTypes.js";
-import { LEVELS, WAVES } from "./data/levels.js";
+import { LEVELS, wavesFor } from "./data/levels.js";
+import { currentWave, towerUnlockWave, abilityUnlockWave, maxTowerLevelFor } from "./data/unlocks.js";
+import { summonCountBonus, fireDpsMul, fireDurationBonus } from "./data/store.js";
 import { ABILITY_COOLDOWN, SUMMON, FIRE } from "./data/abilities.js";
 import { el } from "./dom.js";
 import { dist, nearestPointOnPath } from "./geometry.js";
@@ -31,6 +33,12 @@ function positionMenu(menuEl, x, y) {
 
 export function closeMenus() { closeBuildMenu(); closeManageMenu(); }
 
+// Rebuild an open build menu in place — used when a wave clears while the
+// player is browsing one, so newly unlocked towers appear without reopening.
+export function refreshBuildMenu() {
+  if (state.menuSpot && buildMenu.classList.contains("show")) openBuildMenu(state.menuSpot);
+}
+
 // --- build menu (empty spot) ---
 function openBuildMenu(spot) {
   closeManageMenu();
@@ -38,13 +46,19 @@ function openBuildMenu(spot) {
   buildMenu.innerHTML = "";
   for (const key of TYPE_LIST) {
     const def = TOWER_TYPES[key];
+    const unlockAt = towerUnlockWave(LEVEL.index, key);
+    const locked = unlockAt === null || currentWave(state) < unlockAt;
     const btn = document.createElement("button");
     btn.className = "tower-opt";
-    btn.disabled = state.gold < def.cost;
-    btn.title = def.name + " — " + def.cost + " gold";
+    btn.disabled = locked || state.gold < def.cost;
+    btn.title = locked
+      ? def.name + (unlockAt === null ? " — unlocks in a later realm" : " — unlocks at wave " + unlockAt)
+      : def.name + " — " + def.cost + " gold";
     btn.innerHTML =
-      `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span><span class="ct">💰${def.cost}</span>`;
-    btn.addEventListener("click", (ev) => { ev.stopPropagation(); buildTower(spot, key); });
+      `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span>` +
+      (locked ? `<span class="ct">🔒${unlockAt === null ? "" : " w" + unlockAt}</span>`
+              : `<span class="ct">💰${def.cost}</span>`);
+    if (!locked) btn.addEventListener("click", (ev) => { ev.stopPropagation(); buildTower(spot, key); });
     buildMenu.appendChild(btn);
   }
   positionMenu(buildMenu, spot.x, spot.y);
@@ -58,6 +72,8 @@ function closeBuildMenu() {
 
 function buildTower(spot, key) {
   const def = TOWER_TYPES[key];
+  const unlockAt = towerUnlockWave(LEVEL.index, key);
+  if (unlockAt === null || currentWave(state) < unlockAt) return;
   if (spotOccupied(spot)) return closeBuildMenu();
   if (state.gold < def.cost) { setTip("Not enough gold for " + def.name + " (need " + def.cost + ")."); return; }
   state.gold -= def.cost;
@@ -72,7 +88,9 @@ function openManageMenu(tower) {
   closeBuildMenu();
   state.selected = tower;
   const def = tower.def;
+  const levelCap = maxTowerLevelFor(LEVEL.index);
   const maxed = tower.level >= MAX_LEVEL;
+  const capped = !maxed && tower.level >= levelCap;   // held back by this realm, not truly maxed
   const upCost = upgradeCost(tower);
   const stars = "★".repeat(tower.level) + "☆".repeat(MAX_LEVEL - tower.level);
   towerMenu.innerHTML = "";
@@ -84,8 +102,10 @@ function openManageMenu(tower) {
 
   const up = document.createElement("button");
   up.className = "up";
-  up.disabled = maxed || state.gold < upCost;
-  up.textContent = maxed ? "Max level" : `⬆ Upgrade  💰${upCost}`;
+  up.disabled = maxed || capped || state.gold < upCost;
+  up.textContent = maxed ? "Max level"
+    : capped ? "🔒 Upgrades unlock in later realms"
+    : `⬆ Upgrade  💰${upCost}`;
   up.addEventListener("click", (ev) => { ev.stopPropagation(); upgradeTower(tower); });
   towerMenu.appendChild(up);
 
@@ -118,7 +138,7 @@ function closeManageMenu() {
 }
 
 function upgradeTower(t) {
-  if (t.level >= MAX_LEVEL) return;
+  if (t.level >= maxTowerLevelFor(LEVEL.index)) return;
   const cost = upgradeCost(t);
   if (state.gold < cost) { setTip("Not enough gold to upgrade (need " + cost + ")."); return; }
   state.gold -= cost;
@@ -156,8 +176,9 @@ canvas.addEventListener("click", (ev) => {
   // ability placement takes priority over everything else — clicking
   // anywhere on the field (even a build spot) commits the ability there
   if (state.placingAbility === "soldiers") {
-    for (let i = 0; i < SUMMON.count; i++)
-      state.summonedSoldiers.push(makeSummonedSoldier({ x, y }, (i / SUMMON.count) * Math.PI * 2));
+    const count = SUMMON.count + summonCountBonus();
+    for (let i = 0; i < count; i++)
+      state.summonedSoldiers.push(makeSummonedSoldier({ x, y }, (i / count) * Math.PI * 2));
     state.abilityCooldowns.soldiers = ABILITY_COOLDOWN;
     state.placingAbility = null;
     setTip("");
@@ -167,7 +188,8 @@ canvas.addEventListener("click", (ev) => {
     for (const e of state.enemies) {
       if (e.dead || dist(x, y, e.x, e.y) > FIRE.radius) continue;
       e.burning = true;
-      e.burnFor = FIRE.duration;
+      e.burnFor = FIRE.duration + fireDurationBonus();
+      e.burnDps = FIRE.dps * fireDpsMul();
     }
     state.effects.push({ x, y, maxR: FIRE.radius, life: 0.4, maxLife: 0.4 });
     state.abilityCooldowns.fire = ABILITY_COOLDOWN;
@@ -253,17 +275,27 @@ export function updateHud() {
     el("heroPortraitDowned").textContent = h.alive ? "" : "💀 " + Math.ceil(h.respawn) + "s";
   }
 
-  syncAbilityButton("abilitySoldiers", "abilitySoldiersCd", state.abilityCooldowns.soldiers);
-  syncAbilityButton("abilityFire", "abilityFireCd", state.abilityCooldowns.fire);
+  syncAbilityButton("abilitySoldiers", "abilitySoldiersCd", state.abilityCooldowns.soldiers, "soldiers");
+  syncAbilityButton("abilityFire", "abilityFireCd", state.abilityCooldowns.fire, "fire");
 
   refreshManageMenu();
 }
 
-// Grey out an ability square and show a countdown while it's on cooldown.
-function syncAbilityButton(btnId, cdId, cooldown) {
+// null when usable now; otherwise the lock label ("🔒" for the whole level,
+// "🔒w4" when it opens up at a later wave of this one)
+function abilityLock(key) {
+  if (!LEVEL) return "🔒";
+  const at = abilityUnlockWave(LEVEL.index, key);
+  if (at === null) return "🔒";
+  return currentWave(state) < at ? "🔒w" + at : null;
+}
+
+// Grey out an ability square while locked or cooling down, with a label why.
+function syncAbilityButton(btnId, cdId, cooldown, key) {
+  const lock = abilityLock(key);
   const onCooldown = cooldown > 0;
-  el(btnId).classList.toggle("cooling", onCooldown);
-  el(cdId).textContent = onCooldown ? Math.ceil(cooldown) + "s" : "";
+  el(btnId).classList.toggle("cooling", onCooldown || !!lock);
+  el(cdId).textContent = lock ? lock : onCooldown ? Math.ceil(cooldown) + "s" : "";
 }
 
 // Keep the open manage-menu's Upgrade button in sync as gold changes live
@@ -273,16 +305,17 @@ function refreshManageMenu() {
   const t = state.selected;
   const up = towerMenu.querySelector(".up");
   if (!up) return;
-  const maxed = t.level >= MAX_LEVEL;
+  const maxed = t.level >= maxTowerLevelFor(LEVEL.index);
   up.disabled = maxed || state.gold < upgradeCost(t);
 }
 
 export function updateButtons() {
   const btn = el("startBtn");
   if (state.over) { btn.disabled = true; return; }
-  btn.disabled = state.running || state.waveIndex + 1 >= WAVES.length;
+  const waveCount = wavesFor(LEVEL).length;
+  btn.disabled = state.running || state.waveIndex + 1 >= waveCount;
   btn.textContent = state.waveIndex === -1 ? "Start wave 1" : "Start wave " + (state.waveIndex + 2);
-  if (state.waveIndex + 1 >= WAVES.length && !state.running) btn.textContent = "All waves done";
+  if (state.waveIndex + 1 >= waveCount && !state.running) btn.textContent = "All waves done";
 }
 
 export function setTip(msg) { el("tip").textContent = msg; }
@@ -362,6 +395,8 @@ el("heroPortrait").addEventListener("click", () => {
 // the actual effect happens wherever the player clicks next (see the canvas
 // click handler above, which checks state.placingAbility first).
 el("abilitySoldiers").addEventListener("click", () => {
+  const lock = abilityLock("soldiers");
+  if (lock) { setTip(lock === "🔒" ? "Reinforcements aren't available in this realm yet." : "Reinforcements unlock at wave " + lock.slice(2) + "."); return; }
   if (state.abilityCooldowns.soldiers > 0) return;
   state.repositioning = null;
   state.heroSelected = false;
@@ -371,6 +406,8 @@ el("abilitySoldiers").addEventListener("click", () => {
 });
 
 el("abilityFire").addEventListener("click", () => {
+  const lock = abilityLock("fire");
+  if (lock) { setTip(lock === "🔒" ? "Ignite isn't available in this realm yet." : "Ignite unlocks at wave " + lock.slice(2) + "."); return; }
   if (state.abilityCooldowns.fire > 0) return;
   state.repositioning = null;
   state.heroSelected = false;
@@ -398,7 +435,7 @@ export function resetGame() {
   el("speedBtn").textContent = "Speed: 1×";
   el("pauseBtn").textContent = "⏸ Pause";
   el("overlay").classList.remove("show");
-  el("waveMax").textContent = WAVES.length;
+  el("waveMax").textContent = wavesFor(LEVEL).length;
   closeMenus();
   setTip("Place towers, then start wave 1.");
   updateHud();

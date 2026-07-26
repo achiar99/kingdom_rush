@@ -12,6 +12,12 @@ export const THEMES = {
     path: { rim: "#8c4a26", body: "#b56a35", track: "#e09a58" } },
   obsidian: { grass: ["#2e2440", "#171126"], checker: "rgba(160,120,255,0.05)",
     path: { rim: "#3f3357", body: "#5c4a80", track: "#8a74b8" } },
+  amberwood: { grass: ["#a8622e", "#6e3d1e"], checker: "rgba(255,200,80,0.04)",
+    path: { rim: "#4e3320", body: "#7a5638", track: "#a5825a" } },
+  tidewater: { grass: ["#49a4a0", "#2e6f6d"], checker: "rgba(255,255,255,0.04)",
+    path: { rim: "#8a6a3a", body: "#c9a566", track: "#e8cf96" } },
+  stormcrag: { grass: ["#5a6474", "#333a47"], checker: "rgba(255,255,255,0.03)",
+    path: { rim: "#3a4150", body: "#606a7d", track: "#8d99ae" } },
 };
 
 // Levels: each has its own map geometry, theme, economy and difficulty.
@@ -107,10 +113,132 @@ export const LEVELS = [
       { x: 820, y: 200 }, { x: 580, y: 535 }, { x: 60, y: 130 },
     ],
   },
+  {
+    id: "amberwood", name: "Amberwood", difficulty: "Nightmare",
+    theme: "amberwood", startGold: 300, startLives: 15, hpScale: 4.0,
+    node: { x: 6, y: 88 },
+    path: [
+      { x: 140, y: -30 }, { x: 140, y: 160 }, { x: 420, y: 160 },
+      { x: 420, y: 40 }, { x: 760, y: 40 }, { x: 760, y: 240 },
+      { x: 240, y: 240 }, { x: 240, y: 420 }, { x: 700, y: 420 }, { x: 700, y: 590 },
+    ],
+    spots: [
+      { x: 60, y: 90 }, { x: 280, y: 80 }, { x: 560, y: 140 },
+      { x: 860, y: 140 }, { x: 330, y: 330 }, { x: 560, y: 330 },
+      { x: 820, y: 330 }, { x: 580, y: 510 }, { x: 150, y: 480 },
+    ],
+    waves: [
+      { hpMul: 1.0, speedMul: 1.05, groups: [
+        { type: "grunt", count: 10, gap: 0.6 }, { type: "runner", count: 6, gap: 0.35 } ] },
+      { hpMul: 1.1, speedMul: 1.05, groups: [
+        { type: "flyer", count: 8, gap: 0.5 } ] },
+      { hpMul: 1.2, speedMul: 1.1, groups: [
+        { type: "armored", count: 8, gap: 0.55 }, { type: "runner", count: 8, gap: 0.3 } ] },
+      { hpMul: 1.3, speedMul: 1.1, groups: [
+        { type: "tank", count: 4, gap: 1.1 }, { type: "flyer", count: 6, gap: 0.45 } ] },
+      { hpMul: 1.45, speedMul: 1.1, groups: [
+        { type: "runner", count: 14, gap: 0.25 }, { type: "grunt", count: 10, gap: 0.4 } ] },
+      { hpMul: 1.55, speedMul: 1.15, groups: [
+        { type: "armored", count: 8, gap: 0.5 }, { type: "flyer", count: 8, gap: 0.4 } ] },
+      { hpMul: 1.65, speedMul: 1.15, groups: [
+        { type: "tank", count: 5, gap: 1.0 }, { type: "armored", count: 6, gap: 0.5 } ] },
+      { hpMul: 1.75, speedMul: 1.2, groups: [
+        { type: "boss", count: 1, gap: 0.6 }, { type: "flyer", count: 8, gap: 0.4 },
+        { type: "runner", count: 10, gap: 0.25 } ] },
+      { hpMul: 1.9, speedMul: 1.2, groups: [
+        { type: "tank", count: 4, gap: 0.9 }, { type: "armored", count: 8, gap: 0.45 },
+        { type: "boss", count: 1, gap: 0.5 } ] },
+    ],
+  },
+  {
+    id: "tidewater", name: "Tidewater Strand", difficulty: "Torment",
+    theme: "tidewater", startGold: 310, startLives: 12, hpScale: 4.7,
+    node: { x: 7, y: 52 },
+    path: [
+      { x: -30, y: 90 }, { x: 200, y: 90 }, { x: 200, y: 480 },
+      { x: 500, y: 480 }, { x: 500, y: 200 }, { x: 760, y: 200 },
+      { x: 760, y: 480 }, { x: 930, y: 480 },
+    ],
+    spots: [
+      { x: 100, y: 190 }, { x: 320, y: 200 }, { x: 340, y: 380 },
+      { x: 610, y: 330 }, { x: 610, y: 90 }, { x: 860, y: 300 },
+      { x: 100, y: 300 }, { x: 400, y: 545 }, { x: 860, y: 410 },
+    ],
+    waves: [
+      { hpMul: 1.0, speedMul: 1.15, groups: [
+        { type: "runner", count: 12, gap: 0.3 } ] },
+      { hpMul: 1.1, speedMul: 1.15, groups: [
+        { type: "grunt", count: 10, gap: 0.5 }, { type: "flyer", count: 6, gap: 0.45 } ] },
+      { hpMul: 1.2, speedMul: 1.15, groups: [
+        { type: "runner", count: 10, gap: 0.25 }, { type: "armored", count: 6, gap: 0.5 } ] },
+      { hpMul: 1.3, speedMul: 1.2, groups: [
+        { type: "flyer", count: 10, gap: 0.35 } ] },
+      { hpMul: 1.4, speedMul: 1.2, groups: [
+        { type: "tank", count: 4, gap: 1.0 }, { type: "runner", count: 10, gap: 0.25 } ] },
+      { hpMul: 1.5, speedMul: 1.2, groups: [
+        { type: "armored", count: 10, gap: 0.45 } ] },
+      { hpMul: 1.6, speedMul: 1.25, groups: [
+        { type: "runner", count: 16, gap: 0.2 }, { type: "flyer", count: 8, gap: 0.35 } ] },
+      { hpMul: 1.7, speedMul: 1.25, groups: [
+        { type: "tank", count: 5, gap: 0.9 }, { type: "armored", count: 8, gap: 0.45 } ] },
+      { hpMul: 1.8, speedMul: 1.25, groups: [
+        { type: "boss", count: 1, gap: 0.6 }, { type: "runner", count: 12, gap: 0.22 },
+        { type: "flyer", count: 8, gap: 0.35 } ] },
+      { hpMul: 1.95, speedMul: 1.3, groups: [
+        { type: "boss", count: 2, gap: 3.0 }, { type: "tank", count: 4, gap: 0.9 } ] },
+    ],
+  },
+  {
+    id: "stormcrag", name: "Stormcrag Summit", difficulty: "Apocalypse",
+    theme: "stormcrag", startGold: 330, startLives: 10, hpScale: 5.5,
+    node: { x: 25, y: 15 },
+    path: [
+      { x: -30, y: 80 }, { x: 820, y: 80 }, { x: 820, y: 300 },
+      { x: 420, y: 300 }, { x: 420, y: 180 }, { x: 160, y: 180 },
+      { x: 160, y: 460 }, { x: 680, y: 460 }, { x: 680, y: 590 },
+    ],
+    spots: [
+      { x: 600, y: 190 }, { x: 740, y: 190 }, { x: 300, y: 240 },
+      { x: 60, y: 300 }, { x: 300, y: 380 }, { x: 530, y: 380 },
+      { x: 770, y: 380 }, { x: 540, y: 545 }, { x: 880, y: 180 },
+    ],
+    waves: [
+      { hpMul: 1.0, speedMul: 1.1, groups: [
+        { type: "grunt", count: 12, gap: 0.5 } ] },
+      { hpMul: 1.1, speedMul: 1.1, groups: [
+        { type: "armored", count: 8, gap: 0.5 }, { type: "runner", count: 8, gap: 0.3 } ] },
+      { hpMul: 1.2, speedMul: 1.15, groups: [
+        { type: "flyer", count: 10, gap: 0.4 } ] },
+      { hpMul: 1.3, speedMul: 1.15, groups: [
+        { type: "tank", count: 4, gap: 1.0 }, { type: "grunt", count: 10, gap: 0.4 } ] },
+      { hpMul: 1.4, speedMul: 1.15, groups: [
+        { type: "runner", count: 16, gap: 0.22 }, { type: "flyer", count: 6, gap: 0.4 } ] },
+      { hpMul: 1.5, speedMul: 1.2, groups: [
+        { type: "armored", count: 10, gap: 0.45 }, { type: "tank", count: 3, gap: 1.0 } ] },
+      { hpMul: 1.6, speedMul: 1.2, groups: [
+        { type: "boss", count: 1, gap: 0.6 }, { type: "flyer", count: 10, gap: 0.35 } ] },
+      { hpMul: 1.7, speedMul: 1.2, groups: [
+        { type: "runner", count: 14, gap: 0.22 }, { type: "armored", count: 8, gap: 0.45 } ] },
+      { hpMul: 1.8, speedMul: 1.25, groups: [
+        { type: "tank", count: 6, gap: 0.85 }, { type: "flyer", count: 8, gap: 0.35 } ] },
+      { hpMul: 1.9, speedMul: 1.25, groups: [
+        { type: "boss", count: 1, gap: 0.6 }, { type: "armored", count: 10, gap: 0.4 },
+        { type: "runner", count: 10, gap: 0.25 } ] },
+      { hpMul: 2.0, speedMul: 1.3, groups: [
+        { type: "tank", count: 5, gap: 0.8 }, { type: "flyer", count: 12, gap: 0.3 },
+        { type: "grunt", count: 10, gap: 0.35 } ] },
+      { hpMul: 2.2, speedMul: 1.3, groups: [
+        { type: "boss", count: 3, gap: 2.5 }, { type: "tank", count: 4, gap: 0.8 },
+        { type: "armored", count: 8, gap: 0.4 } ] },
+    ],
+  },
 ];
 
-// Wave definitions. Each wave is a list of spawn `groups` (type + count + gap),
-// spawned in order. hpMul/speedMul scale the whole wave so later ones bite.
+// Default wave definitions, shared by every level that doesn't declare its
+// own `waves` array. Each wave is a list of spawn `groups` (type + count +
+// gap), spawned in order. hpMul/speedMul scale the whole wave so later ones bite.
+export const wavesFor = (level) => level.waves || WAVES;
+
 export const WAVES = [
   { hpMul: 1.0, speedMul: 1.0, groups: [
     { type: "grunt", count: 8, gap: 0.9 } ] },

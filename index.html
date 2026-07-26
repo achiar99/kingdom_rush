@@ -201,6 +201,40 @@
   #saveControls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
   #saveTip { color: var(--muted); font-size: 12px; min-height: 16px; }
 
+  /* star upgrade store */
+  #storeModal {
+    position: fixed; inset: 0; z-index: 20;
+    background: rgba(10, 12, 18, 0.65);
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  #storeModal[hidden] { display: none; }
+  #storePanel {
+    background: var(--panel); border-radius: 14px; padding: 18px 20px;
+    width: min(680px, 100%); max-height: 90vh; overflow-y: auto;
+    box-shadow: 0 14px 50px rgba(0,0,0,.55);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  #storeHead { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; }
+  #storeStars { color: var(--gold); font-size: 14px; font-variant-numeric: tabular-nums; }
+  #storeTracks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  @media (max-width: 560px) { #storeTracks { grid-template-columns: 1fr; } }
+  .store-track {
+    background: rgba(16, 20, 28, 0.55); border-radius: 10px; padding: 10px 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .store-track .row1 { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+  .store-track .ranks { margin-left: auto; color: var(--gold); letter-spacing: 2px; font-size: 13px; }
+  .store-track .per { color: var(--muted); font-size: 12px; }
+  .store-track button {
+    align-self: flex-start;
+    background: linear-gradient(160deg, #4a3a12, #241b08);
+    border: 1.5px solid #e0a83a; color: var(--ink);
+    border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer;
+  }
+  .store-track button:hover:not(:disabled) { border-color: var(--gold); }
+  .store-track button:disabled { opacity: 0.45; cursor: default; }
+  #storeFoot { display: flex; justify-content: space-between; margin-top: 4px; }
+
   /* save-slot picker */
   #slotList {
     display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -240,12 +274,29 @@
       <div id="mapNodes"></div>
     </div>
     <div id="saveControls">
+      <button id="storeBtn">⭐ Upgrade store</button>
       <button id="slotsBtn" class="secondary">🗂 Switch slot</button>
       <button id="exportBtn" class="secondary">⬇ Export save</button>
       <button id="importBtn" class="secondary">⬆ Import save</button>
       <button id="wipeBtn" class="secondary">🗑 Erase progress</button>
       <input id="importFile" type="file" accept="application/json,.json" hidden />
       <span id="saveTip"></span>
+    </div>
+
+    <!-- star upgrade store (modal over the map) -->
+    <div id="storeModal" hidden>
+      <div id="storePanel">
+        <div id="storeHead">
+          <b>⭐ Upgrade Store</b>
+          <span id="storeStars"></span>
+        </div>
+        <div class="sub">Spend stars earned from victories on permanent upgrades for this save slot.</div>
+        <div id="storeTracks"></div>
+        <div id="storeFoot">
+          <button id="storeReset" class="secondary">↺ Refund all stars</button>
+          <button id="storeClose">Close</button>
+        </div>
+      </div>
     </div>
   </div>
 

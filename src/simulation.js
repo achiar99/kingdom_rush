@@ -6,20 +6,22 @@
 // import — safe here because every cross-reference is only *called* inside
 // a function body, long after both modules have finished loading.
 import { CONFIG } from "./config.js";
-import { WAVES } from "./data/levels.js";
+import { wavesFor } from "./data/levels.js";
+import { newUnlocksAt } from "./data/unlocks.js";
 import { HERO } from "./data/hero.js";
 import { FIRE, SUMMON } from "./data/abilities.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy } from "./entities.js";
 import { getDifficulty } from "./save.js";
-import { closeMenus, updateHud, updateButtons, setTip, endGame } from "./ui.js";
+import { closeMenus, refreshBuildMenu, updateHud, updateButtons, setTip, endGame } from "./ui.js";
 
 export function startNextWave() {
   if (state.over || state.running) return;
-  if (state.waveIndex + 1 >= WAVES.length) return;
+  const waves = wavesFor(LEVEL);
+  if (state.waveIndex + 1 >= waves.length) return;
   state.waveIndex++;
-  const wave = WAVES[state.waveIndex];
+  const wave = waves[state.waveIndex];
   const hpMul = wave.hpMul * LEVEL.hpScale * getDifficulty().hpMul;
   // flatten the wave's groups into an ordered queue of individual spawns,
   // each carrying its own gap (delay until the NEXT spawn) and wave scaling.
@@ -36,11 +38,15 @@ export function startNextWave() {
 
 export function waveCleared() {
   state.running = false;
-  if (state.waveIndex + 1 >= WAVES.length) {
+  if (state.waveIndex + 1 >= wavesFor(LEVEL).length) {
     endGame(true);
   } else {
     state.gold += CONFIG.waveClearBonus;
-    setTip("Wave cleared! +" + CONFIG.waveClearBonus + " gold. Build up, then start the next wave.");
+    const fresh = newUnlocksAt(LEVEL.index, state.waveIndex + 2);
+    setTip("Wave cleared! +" + CONFIG.waveClearBonus + " gold." +
+      (fresh.length ? " 🔓 Unlocked: " + fresh.join(", ") + "!" : "") +
+      " Build up, then start the next wave.");
+    refreshBuildMenu();
   }
   updateHud();
   updateButtons();
@@ -67,7 +73,7 @@ export function update(dt) {
   // of position — it doesn't care where the enemy has wandered to since.
   for (const e of state.enemies) {
     if (e.dead || !e.burning) continue;
-    damageEnemy(e, FIRE.dps * dt, true);
+    damageEnemy(e, (e.burnDps || FIRE.dps) * dt, true);
     e.burnFor -= dt;
     if (e.burnFor <= 0) e.burning = false;
   }

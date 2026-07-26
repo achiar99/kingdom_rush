@@ -9,6 +9,7 @@ import { el, setView } from "./dom.js";
 import { state, loadLevel } from "./state.js";
 import { progress, getStars } from "./save.js";
 import { closeMenus, resetGame } from "./ui.js";
+import { refreshStoreButton } from "./store.js";
 
 export function showMap() {
   state.paused = true;                 // freeze any in-progress game underneath
@@ -25,6 +26,8 @@ export function startLevel(idx) {
 }
 
 export function renderMap() {
+  refreshStoreButton();
+
   // dashed trail connecting the level nodes
   const svg = el("mapTrail");
   const pts = LEVELS.map((lv) => (lv.node.x / 100 * 900) + " " + (lv.node.y / 100 * 560));

@@ -2,6 +2,7 @@
 // modules register DOM event listeners as a side effect of loading), then
 // runs the render/update loop and boots into the world map.
 import "./ui.js";
+import "./store.js";
 import { state, LEVEL } from "./state.js";
 import { update } from "./simulation.js";
 import { render } from "./render.js";
