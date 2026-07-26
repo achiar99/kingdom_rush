@@ -5,7 +5,7 @@
 import { LEVELS } from "./data/levels.js";
 import { DIFFICULTIES, DIFFICULTY_LIST } from "./data/difficulties.js";
 import { el, setView } from "./dom.js";
-import { SLOT_COUNT, getSlotInfo, selectSlot, deleteSlot } from "./save.js";
+import { SLOT_COUNT, getSlotInfo, selectSlot, deleteSlot, noSlotsExist } from "./save.js";
 import { showMap } from "./worldmap.js";
 
 export function showSlotSelect() {
@@ -14,6 +14,12 @@ export function showSlotSelect() {
 }
 
 export function renderSlotScreen() {
+  // With nothing saved anywhere there's nothing to "choose" — this screen is
+  // purely about starting a first playthrough, so say so.
+  el("slotSub").textContent = noSlotsExist()
+    ? "Start a new game — pick a slot and a difficulty."
+    : "Choose a save slot.";
+
   const list = el("slotList");
   list.innerHTML = "";
   for (let i = 0; i < SLOT_COUNT; i++) {

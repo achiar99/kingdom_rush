@@ -93,14 +93,25 @@ function migrateLegacySave() {
 }
 migrateLegacySave();
 
-// Which slot (if any) was last explicitly opened — lets the game resume
-// straight into it on the next visit instead of showing slot-select again.
+// Which slot (if any) the game can resume straight into on the next visit,
+// instead of showing slot-select again.
+//
+// "Was last opened" isn't enough on its own: the remembered slot may since
+// have been deleted, and resuming into one that no longer holds any data
+// would drop the player on the world map looking at a phantom empty save.
+// With nothing real to resume, boot belongs on the slot screen.
 export function getActiveSlot() {
   const stored = store.getItem(ACTIVE_KEY);
   if (stored === null) return null; // Number(null) is 0, so this check can't be skipped
   const raw = Number(stored);
-  return Number.isInteger(raw) && raw >= 0 && raw < SLOT_COUNT ? raw : null;
+  const inRange = Number.isInteger(raw) && raw >= 0 && raw < SLOT_COUNT;
+  return inRange && readSlotRaw(raw) ? raw : null;
 }
+
+// True when every slot is empty — a first-ever visit, or one where the player
+// has deleted everything. Either way there is nothing to resume.
+export const noSlotsExist = () =>
+  !Array.from({ length: SLOT_COUNT }, (_, i) => readSlotRaw(i)).some(Boolean);
 
 export function getSlotInfo(i) {
   const data = readSlotRaw(i);
@@ -136,7 +147,13 @@ export function selectSlot(i, difficultyKey) {
 export function deleteSlot(i) {
   store.removeItem(slotKey(i));
   pushSlotToDisk(i, null); // null deletes the slot's json file
-  if (i === activeSlot) progress = defaultProgress();
+  if (i === activeSlot) {
+    // Drop the resume pointer too — leaving it aimed at a slot that no
+    // longer exists is what used to boot the game into a phantom save.
+    activeSlot = null;
+    store.removeItem(ACTIVE_KEY);
+    progress = defaultProgress();
+  }
 }
 
 export function getDifficulty() {
