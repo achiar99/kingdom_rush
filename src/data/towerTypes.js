@@ -32,9 +32,15 @@ export const TOWER_TYPES = {
   barracks: {
     key: "barracks", name: "Phalanx", icon: "🛡️", cost: 90,
     blurb: "Hoplites who hold the line. Nothing they can do about flyers.",
-    attack: "none", range: 70,             // soldier leash radius around the CURRENT
-                                            // rally point (combat engagement only)
-    rallyReach: 150,                       // max distance the rally point may be
+    // Soldier leash radius, measured from the CURRENT rally point (combat
+    // engagement only). Sized against the maps rather than picked by feel:
+    // roads come within a median of 64px of another stretch of themselves, so
+    // the old 70px leash let a squad standing on one lane fight creeps walking
+    // down the next one — on 38 of the 50 levels. At 40 it only reaches across
+    // where the road genuinely doubles back on itself, which is a chokepoint
+    // the player earned rather than a bug.
+    attack: "none", range: 40,
+    rallyReach: 90,                        // max distance the rally point may be
                                             // relocated from the tower's build spot —
                                             // fixed, not level-scaled like `range`
     soldierCount: 3, soldierHp: 55, soldierDamage: 9,
@@ -115,7 +121,7 @@ export const SPECS = {
       key: "myrmidon", name: "Myrmidons", icon: "⚔️", cost: 300,
       blurb: "Four of them, and they go looking for the fight.",
       soldierHp: 115, soldierDamage: 34, soldierCount: 4,
-      soldierAttackInterval: 0.6, soldierRespawn: 4, range: 105,
+      soldierAttackInterval: 0.6, soldierRespawn: 4, range: 52,
       palette: { light: "#d8c0e0", mid: "#7a5a96", dark: "#3c2a52" },
     },
   },

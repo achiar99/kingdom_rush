@@ -1,139 +1,246 @@
-// Static scenery: themed ground, the road, empty build spots and the castle
-// at the path's exit.
+// Static scenery: themed ground, the paved road, empty build spots and the
+// temple the creeps are trying to reach.
+//
+// The ground, road and scattered props never change once a level is loaded, so
+// they're painted once into an offscreen canvas and blitted from then on. That
+// single change is what pays for the detail in scenery.js — five hundred
+// shaded flagstones and sixty trees are unaffordable at sixty frames a second
+// and free when drawn once.
 import { CONFIG } from "../config.js";
 import { TOWER_TYPES } from "../data/towerTypes.js";
-import { pointAtDistance } from "../geometry.js";
-import { state, PATH, PATH_LEN, BUILD_SPOTS, THEME, spotOccupied } from "../state.js";
-import { ctx, groundShadow, shadedSphere } from "./canvas.js";
+import { state, PATH, BUILD_SPOTS, LEVEL, THEME, spotOccupied } from "../state.js";
+import { ctx, groundShadow } from "./canvas.js";
+import { paveRoad, scatterProps } from "./scenery.js";
 
-export function drawGround() {
-  const g = ctx.createLinearGradient(0, 0, 0, CONFIG.height);
-  g.addColorStop(0, THEME.grass[0]);
-  g.addColorStop(1, THEME.grass[1]);
-  ctx.fillStyle = g;
-  ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
-  ctx.fillStyle = THEME.checker;
-  for (let y = 0; y < CONFIG.height; y += 40)
-    for (let x = 0; x < CONFIG.width; x += 40)
-      if (((x + y) / 40) % 2 === 0) ctx.fillRect(x, y, 40, 40);
-  const v = ctx.createRadialGradient(
-    CONFIG.width / 2, CONFIG.height / 2, CONFIG.height * 0.3,
-    CONFIG.width / 2, CONFIG.height / 2, CONFIG.height * 0.85);
-  v.addColorStop(0, "rgba(0,0,0,0)");
-  v.addColorStop(1, "rgba(0,0,0,0.28)");
-  ctx.fillStyle = v;
-  ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
-}
+const W = CONFIG.width, H = CONFIG.height;
 
-function strokePath(width, color) {
-  ctx.strokeStyle = color;
-  ctx.lineWidth = width;
-  ctx.beginPath();
-  ctx.moveTo(PATH[0].x, PATH[0].y);
-  for (let i = 1; i < PATH.length; i++) ctx.lineTo(PATH[i].x, PATH[i].y);
-  ctx.stroke();
-}
+// ------------------------------------------------------------ scenery cache
+let sceneryCanvas = null;
+let sceneryKey = null;      // the level this cache was painted for
 
-export function drawPath() {
-  ctx.lineJoin = "round";
-  ctx.lineCap = "round";
-  ctx.save();
-  ctx.translate(0, 3);
-  strokePath(46, "rgba(0,0,0,0.25)");
-  ctx.restore();
-  strokePath(48, "rgba(0,0,0,0.10)");   // soft blend into the grass
-  strokePath(44, THEME.path.rim);
-  strokePath(38, THEME.path.body);
-  strokePath(26, THEME.path.track);
-  drawPathTexture();
-  // worn dashed footpath line down the middle
-  ctx.setLineDash([8, 14]);
-  strokePath(4, "rgba(255,240,200,0.16)");
-  ctx.setLineDash([]);
-}
-
-// Texture sampled along the road: faint worn bands across the track, and
-// small pebbles scattered on alternating edges. Everything is deterministic
-// (position-derived), so the road doesn't shimmer between frames.
-function drawPathTexture() {
-  for (let d = 24, i = 0; d < PATH_LEN - 12; d += 38, i++) {
-    const p = pointAtDistance(PATH, PATH_LEN, d);
-    const q = pointAtDistance(PATH, PATH_LEN, d + 2);
-    const ang = Math.atan2(q.y - p.y, q.x - p.x);
-    const h = Math.sin(i * 127.1) * 43758.5453;
-    const f = h - Math.floor(h);          // stable pseudo-random 0..1 per band
-
-    // worn band across the track
-    ctx.save();
-    ctx.translate(p.x, p.y);
-    ctx.rotate(ang);
-    ctx.fillStyle = "rgba(0,0,0,0.07)";
-    ctx.beginPath();
-    ctx.roundRect(-1.5, -11, 3, 22, 1.5);
-    ctx.fill();
-    ctx.restore();
-
-    // pebble hugging one edge of the road body
-    const side = i % 2 ? 1 : -1;
-    const off = 14 + f * 4;
-    const px = p.x + Math.cos(ang + Math.PI / 2) * side * off;
-    const py = p.y + Math.sin(ang + Math.PI / 2) * side * off;
-    const pr = 1.7 + f * 1.4;
-    ctx.fillStyle = "rgba(30,18,8,0.28)";
-    ctx.beginPath();
-    ctx.arc(px, py, pr, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "rgba(255,245,220,0.22)";
-    ctx.beginPath();
-    ctx.arc(px - pr * 0.3, py - pr * 0.3, pr * 0.5, 0, Math.PI * 2);
-    ctx.fill();
+function paintScenery() {
+  if (!sceneryCanvas) {
+    sceneryCanvas = document.createElement("canvas");
+    sceneryCanvas.width = W;
+    sceneryCanvas.height = H;
   }
+  const g = sceneryCanvas.getContext("2d");
+  g.clearRect(0, 0, W, H);
+
+  // --- ground ---
+  const base = g.createLinearGradient(0, 0, 0, H);
+  base.addColorStop(0, THEME.grass[0]);
+  base.addColorStop(1, THEME.grass[1]);
+  g.fillStyle = base;
+  g.fillRect(0, 0, W, H);
+
+  // Two scales of soft mottling instead of the old hard 40px checkerboard:
+  // broad patches that break the flat wash of colour, then finer dappling on
+  // top of them like sunlight through leaves. Both are position-derived, so
+  // the ground never shimmers between frames.
+  const blot = (count, minR, maxR, lightA, darkA) => {
+    for (let i = 0; i < count; i++) {
+      const h = Math.sin(i * 12.9898 + count) * 43758.5453;
+      const f = h - Math.floor(h);
+      const h2 = Math.sin(i * 78.233 + count) * 12345.6789;
+      const f2 = h2 - Math.floor(h2);
+      const h3 = Math.sin(i * 39.427 + count) * 9871.234;
+      const f3 = h3 - Math.floor(h3);
+      const x = f * W, y = f2 * H, r = minR + f3 * (maxR - minR);
+      const rad = g.createRadialGradient(x, y, 0, x, y, r);
+      rad.addColorStop(0, f > 0.5 ? `rgba(255,250,215,${lightA})` : `rgba(20,34,14,${darkA})`);
+      rad.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = rad;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+  };
+  blot(26, 90, 210, 0.07, 0.09);     // broad ground patches
+  blot(190, 20, 60, 0.05, 0.05);     // finer dappling
+
+  paveRoad(g, PATH, THEME);
+  scatterProps(g, PATH, BUILD_SPOTS, LEVEL.stageId, LEVEL.index + 1);
+
+  // vignette, last, over everything
+  const v = g.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.88);
+  v.addColorStop(0, "rgba(0,0,0,0)");
+  v.addColorStop(1, "rgba(0,0,0,0.3)");
+  g.fillStyle = v;
+  g.fillRect(0, 0, W, H);
+
+  sceneryKey = LEVEL.id;
 }
 
+// Ground + road + props in one blit. Repaints only when the level changes.
+export function drawGround() {
+  if (sceneryKey !== LEVEL.id) paintScenery();
+  ctx.drawImage(sceneryCanvas, 0, 0);
+}
+
+// The road is part of the cached scenery now; this stays as a no-op so
+// render.js's draw order reads the same as it always did.
+export function drawPath() {}
+
+// ------------------------------------------------------------- build spots
+// An empty, dug-out socket — deliberately NOT another piece of pale marble.
+// A raised white plinth read as scenery next to the fallen columns and rocks;
+// a dark recess ringed in gold reads as "something goes here", which is the
+// one thing this marker has to communicate.
 export function drawBuildSpots() {
   const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
+  const affordable = state.gold >= TOWER_TYPES.archer.cost;
+
   for (const s of BUILD_SPOTS) {
     if (spotOccupied(s)) continue;
-    const affordable = state.gold >= TOWER_TYPES.archer.cost;
-    groundShadow(s.x, s.y + 3, 20, 8);
-    shadedSphere(s.x, s.y, 15, "#8a8f9c", "#6c7280", "#474c58");
+
+    ctx.save();
+    ctx.translate(s.x, s.y);
+
+    // the hole: dark, with the lip catching light along its lower edge
+    const pit = ctx.createRadialGradient(0, -2, 1, 0, 0, 15);
+    pit.addColorStop(0, "rgba(18,14,8,0.62)");
+    pit.addColorStop(1, "rgba(28,22,12,0.34)");
+    ctx.fillStyle = pit;
     ctx.beginPath();
-    ctx.arc(s.x, s.y, 15, 0, Math.PI * 2);
-    ctx.setLineDash([5, 4]);
+    ctx.ellipse(0, 0, 15, 11, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,246,220,0.22)";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.ellipse(0, 1, 15, 11, 0, 0.15, Math.PI - 0.15);
+    ctx.stroke();
+
+    // four corner footing stones, so it reads as a prepared foundation
+    ctx.fillStyle = "rgba(226,218,198,0.5)";
+    for (const [cx, cy] of [[-12, -6], [12, -6], [-12, 6], [12, 6]]) {
+      ctx.beginPath();
+      ctx.roundRect(cx - 3, cy - 2.5, 6, 5, 1.2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // gold ring + plus while you can afford to build, quiet grey when you can't
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, 18, 0, Math.PI * 2);
+    ctx.setLineDash([5, 5]);
     ctx.lineWidth = 2;
-    ctx.strokeStyle = affordable ? `rgba(255,207,82,${0.55 + 0.4 * pulse})` : "rgba(255,255,255,0.25)";
+    ctx.strokeStyle = affordable ? `rgba(255,207,82,${0.55 + 0.4 * pulse})` : "rgba(210,204,186,0.2)";
     ctx.stroke();
     ctx.setLineDash([]);
-    ctx.fillStyle = affordable ? `rgba(255,207,82,${0.5 + 0.3 * pulse})` : "rgba(255,255,255,0.3)";
-    ctx.font = "bold 16px system-ui, sans-serif";
+    ctx.fillStyle = affordable ? `rgba(255,222,130,${0.75 + 0.25 * pulse})` : "rgba(214,208,190,0.4)";
+    ctx.font = "bold 17px system-ui, sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText("+", s.x, s.y);
   }
 }
 
-export function drawCastle(x, y) {
-  groundShadow(x + 32, y + 24, 42, 14);
-  const block = (bx, by, bw, bh, base, top) => {
-    const g = ctx.createLinearGradient(bx, by, bx, by + bh);
-    g.addColorStop(0, top);
-    g.addColorStop(1, base);
+// ------------------------------------------------------------------ temple
+// What the creeps are marching on: a Doric temple with a columned front and a
+// painted pediment.
+//
+// (cx, cy) is the CENTRE of its ground line, not a corner — the caller has to
+// clamp it inside the canvas, and that's only possible if the anchor point is
+// somewhere predictable. Its footprint is roughly 78 wide and reaches 74 above
+// the ground line; TEMPLE_EXTENT publishes that so render.js can clamp
+// honestly instead of guessing.
+export const TEMPLE_EXTENT = { halfW: 44, up: 78, down: 26 };
+
+export function drawCastle(cx, cy) {
+  // A warm halo so the temple separates from the ground on every theme —
+  // white marble on the pale Olympus cloudscape needs it as much as on ash.
+  const halo = ctx.createRadialGradient(cx, cy - 16, 6, cx, cy - 16, 74);
+  halo.addColorStop(0, "rgba(255,226,150,0.20)");
+  halo.addColorStop(1, "rgba(255,200,110,0)");
+  ctx.fillStyle = halo;
+  ctx.beginPath();
+  ctx.arc(cx, cy - 16, 74, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Drawn a little larger than life: it's the thing you're defending, so it
+  // should be the biggest structure on the board.
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.scale(1.12, 1.12);
+  ctx.translate(-cx, -cy);
+
+  const x = cx - 30, y = cy;      // the body below is written corner-relative
+  groundShadow(x + 30, y + 26, 52, 16);
+
+  const marble = (x0, y0, w, h, lit = "#f6f1e4", mid = "#d8d1c0", dark = "#a49c8a") => {
+    const g = ctx.createLinearGradient(x0, y0, x0, y0 + h);
+    g.addColorStop(0, lit);
+    g.addColorStop(0.55, mid);
+    g.addColorStop(1, dark);
     ctx.fillStyle = g;
-    ctx.fillRect(bx, by, bw, bh);
-    ctx.fillStyle = "rgba(255,255,255,0.15)";
-    ctx.fillRect(bx, by, bw, 3);
-    ctx.fillStyle = "rgba(0,0,0,0.25)";
-    ctx.fillRect(bx + bw - 3, by, 3, bh);
+    ctx.fillRect(x0, y0, w, h);
   };
-  block(x, y - 26, 52, 52, "#4a5160", "#8a93a6");
-  for (let i = 0; i < 4; i++) block(x + i * 14, y - 36, 9, 12, "#3f4654", "#7d879b");
-  const dg = ctx.createLinearGradient(x + 20, y - 6, x + 20, y + 26);
-  dg.addColorStop(0, "#5a3320");
-  dg.addColorStop(1, "#2e190f");
+
+  // stylobate — the stepped platform
+  marble(x - 6, y + 14, 72, 8, "#e8e1d0", "#c3bba8", "#8d8676");
+  marble(x - 2, y + 8, 64, 7, "#f0eade", "#cdc5b3", "#968f7f");
+
+  // six columns with entasis suggested by a lit left edge
+  for (let i = 0; i < 6; i++) {
+    const cx = x + 2 + i * 11;
+    marble(cx, y - 22, 8, 31);
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.fillRect(cx, y - 22, 2, 31);
+    ctx.fillStyle = "rgba(90,82,66,0.28)";
+    ctx.fillRect(cx + 6.5, y - 22, 1.5, 31);
+    marble(cx - 1.5, y - 26, 11, 4.5, "#faf5ea", "#ded7c6", "#aaa392"); // capital
+  }
+
+  // architrave + triglyph frieze
+  marble(x - 4, y - 33, 68, 7, "#f2ecdf", "#d2cab8", "#9a9382");
+  for (let i = 0; i < 9; i++) {
+    ctx.fillStyle = "#4d6f8a";
+    ctx.fillRect(x - 2 + i * 7.6, y - 32, 4, 5);
+  }
+
+  // pediment, with a painted tympanum
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y - 33);
+  ctx.lineTo(x + 30, y - 55);
+  ctx.lineTo(x + 68, y - 33);
+  ctx.closePath();
+  const ped = ctx.createLinearGradient(0, y - 55, 0, y - 33);
+  ped.addColorStop(0, "#faf5ea");
+  ped.addColorStop(1, "#c0b8a5");
+  ctx.fillStyle = ped;
+  ctx.fill();
+  ctx.strokeStyle = "rgba(120,110,92,0.6)";
+  ctx.lineWidth = 1.2;
+  ctx.stroke();
+  ctx.fillStyle = "#b8452e";                      // the figure in the tympanum
+  ctx.beginPath();
+  ctx.moveTo(x + 16, y - 37);
+  ctx.lineTo(x + 30, y - 49);
+  ctx.lineTo(x + 44, y - 37);
+  ctx.closePath();
+  ctx.fill();
+
+  // dark doorway between the middle columns
+  const dg = ctx.createLinearGradient(x + 24, y - 20, x + 24, y + 9);
+  dg.addColorStop(0, "#2b2418");
+  dg.addColorStop(1, "#120e08");
   ctx.fillStyle = dg;
-  ctx.fillRect(x + 20, y - 6, 12, 32);
-  ctx.fillStyle = "#c0392b";
-  ctx.fillRect(x + 23, y - 46, 6, 14);
-  ctx.fillStyle = "#8a2820";
-  ctx.fillRect(x + 23, y - 46, 6, 3);
+  ctx.fillRect(x + 24, y - 20, 13, 29);
+
+  // acroterion + banner on the ridge
+  ctx.fillStyle = "#d9a222";
+  ctx.beginPath();
+  ctx.arc(x + 30, y - 57, 3.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "#b8452e";
+  ctx.fillRect(x + 28.5, y - 72, 3, 15);
+  ctx.beginPath();
+  ctx.moveTo(x + 31.5, y - 72);
+  ctx.lineTo(x + 47, y - 68);
+  ctx.lineTo(x + 31.5, y - 63);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.restore();
 }
