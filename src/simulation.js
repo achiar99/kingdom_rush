@@ -13,6 +13,9 @@ import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy, gainHeroXp, makeHero } from "./entities.js";
 import { getDifficulty, markComplete, unlockLevel, progress } from "./save.js";
+import {
+  heroPowerMul, startGoldMul, startLivesBonus, earlyCallGoldBonus,
+} from "./data/store.js";
 import { simHooks } from "./simHooks.js";
 
 // Wipe the world back to the start of the currently-loaded level. Pure state,
@@ -24,8 +27,8 @@ export function resetRun() {
   const heroDef = HEROES[progress.hero] || HEROES[DEFAULT_HERO];
   const endP = PATH[PATH.length - 1];
   Object.assign(state, {
-    gold: Math.round(LEVEL.startGold * diff.goldMul),
-    lives: Math.round(LEVEL.startLives * diff.livesMul),
+    gold: Math.round(LEVEL.startGold * diff.goldMul * startGoldMul()),
+    lives: Math.round(LEVEL.startLives * diff.livesMul) + startLivesBonus(),
     waveIndex: -1,
     enemies: [], towers: [], projectiles: [], effects: [],
     hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
@@ -75,7 +78,7 @@ export function startNextWave() {
 // has run out, so an auto-started wave never awards anything.
 export function earlyCallBonus() {
   if (state.running || state.over) return 0;
-  return Math.max(0, Math.floor(state.nextWaveIn) * CONFIG.earlyCallGold);
+  return Math.max(0, Math.floor(state.nextWaveIn) * (CONFIG.earlyCallGold + earlyCallGoldBonus()));
 }
 
 export function waveCleared() {
@@ -99,7 +102,7 @@ export function waveCleared() {
 // instead of a fixed number, so e.g. Emberfall (18 lives) or Hard (×0.8)
 // rate fairly against the same bar as a standard 20-life Normal run.
 export function starsForRun() {
-  const startingLives = Math.round(LEVEL.startLives * getDifficulty().livesMul);
+  const startingLives = Math.round(LEVEL.startLives * getDifficulty().livesMul) + startLivesBonus();
   const pct = state.lives / startingLives;
   return pct >= 0.9 ? 3 : pct >= 0.55 ? 2 : 1;
 }
@@ -154,6 +157,13 @@ export function update(dt) {
     if (e.burnFor <= 0) e.burning = false;
   }
 
+  // crippling effects wear off
+  for (const e of state.enemies) {
+    if (!e.slowFor) continue;
+    e.slowFor -= dt;
+    if (e.slowFor <= 0) { e.slowFor = 0; e.slowMul = 1; }
+  }
+
   // reset per-frame engagement flags; barracks soldiers re-set them
   for (const e of state.enemies) e.engaged = false;
 
@@ -170,7 +180,7 @@ export function update(dt) {
   // move enemies that aren't blocked in melee
   for (const e of state.enemies) {
     if (e.engaged) continue;
-    e.dist += e.speed * dt;
+    e.dist += e.speed * (e.slowMul ?? 1) * dt;
     const p = pointAtDistance(PATH, PATH_LEN, e.dist);
     e.x = p.x; e.y = p.y;
     if (e.dist >= PATH_LEN) {
@@ -191,7 +201,8 @@ export function update(dt) {
         x: t.x, y: t.y - 7, target, damage: t.damage,
         speed: t.projectileSpeed, color: t.def.projColor,
         attack: t.def.attack, splashRadius: t.splashRadius || 0,
-        magic: t.def.key === "magic", hitsAir: !!t.def.hitsAir, dead: false,
+        magic: t.def.key === "magic", hitsAir: t.hitsAir, dead: false,
+        chain: t.chain || 0, slow: t.slow, dot: t.dot, airBonus: t.airBonus || 1,
       });
       t.cooldown = 1 / t.fireRate;
     }
@@ -213,7 +224,7 @@ export function update(dt) {
 
   // explosion / hit effects fade out
   for (const fx of state.effects) fx.life -= dt;
-
+  
   // cull dead entities
   state.enemies = state.enemies.filter((e) => !e.dead);
   state.projectiles = state.projectiles.filter((p) => !p.dead);
@@ -226,7 +237,49 @@ export function update(dt) {
   simHooks.updateHud();
 }
 
+// One landed hit, including whatever specialisation rider the projectile is
+// carrying. `chain`, `slow`, `dot` and `airBonus` are the whole effect
+// vocabulary — every specialisation in data/towerTypes.js is written in terms
+// of these four, so adding one never means touching combat code.
+function applyHit(p, e) {
+  const dmg = p.damage * (e.flying ? p.airBonus : 1);
+  damageEnemy(e, dmg, p.magic);
+  if (p.slow) {
+    // Keep the strongest slow currently on the creep rather than stacking.
+    e.slowMul = Math.min(e.slowMul ?? 1, p.slow.mul);
+    e.slowFor = Math.max(e.slowFor || 0, p.slow.dur);
+  }
+  if (p.dot) {
+    // Rides the same burn machinery Ignite uses.
+    e.burning = true;
+    e.burnDps = Math.max(e.burnDps || 0, p.dot.dps);
+    e.burnFor = Math.max(e.burnFor || 0, p.dot.dur);
+  }
+  return dmg;
+}
+
+// The nearest `n` other live enemies to (x, y) — how a volley or an arc of
+// prophecy finds its extra targets.
+function nearestOthers(x, y, n, exclude, hitsAir) {
+  const pool = [];
+  for (const e of state.enemies) {
+    if (e.dead || e === exclude) continue;
+    if (e.flying && !hitsAir) continue;
+    pool.push({ e, d: dist(x, y, e.x, e.y) });
+  }
+  pool.sort((a, b) => a.d - b.d);
+  return pool.slice(0, n).map((o) => o.e);
+}
+
 function onProjectileHit(p) {
+  if (p.chain > 0) {
+    // Hits its target, then carries on into the next nearest creeps.
+    applyHit(p, p.target);
+    for (const e of nearestOthers(p.target.x, p.target.y, p.chain - 1, p.target, p.hitsAir))
+      if (dist(p.target.x, p.target.y, e.x, e.y) <= 120) applyHit(p, e);
+    state.effects.push({ x: p.target.x, y: p.target.y, maxR: 60, life: 0.25, maxLife: 0.25, color: p.color });
+    return;
+  }
   if (p.attack === "splash") {
     const ix = p.target.x, iy = p.target.y;
     for (const e of state.enemies) {
@@ -235,14 +288,14 @@ function onProjectileHit(p) {
       // Ballista would still be answering flyers through its splash, which is
       // exactly the weakness it's supposed to have.
       if (e.flying && !p.hitsAir) continue;
-      damageEnemy(e, p.damage, p.magic);
+      applyHit(p, e);
     }
     state.effects.push({ x: ix, y: iy, maxR: p.splashRadius, life: 0.35, maxLife: 0.35, color: "#ffb057" });
   } else {
-    damageEnemy(p.target, p.damage, p.magic);
+    const dealt = applyHit(p, p.target);
     // ranged heroes earn their XP when the arrow/bolt actually lands
     if (p.fromHero && state.hero)
-      awardHeroXp(state.hero, p.damage + (p.target.dead ? p.target.reward : 0));
+      awardHeroXp(state.hero, dealt + (p.target.dead ? p.target.reward : 0));
   }
 }
 
@@ -301,7 +354,7 @@ export function acquireTarget(tower) {
   let best = null, bestDist = -1;
   for (const e of state.enemies) {
     if (e.dead) continue;
-    if (e.flying && !tower.def.hitsAir) continue;
+    if (e.flying && !tower.hitsAir) continue;
     if (dist(tower.x, tower.y, e.x, e.y) <= tower.range && e.dist > bestDist) {
       best = e; bestDist = e.dist;
     }
@@ -310,7 +363,7 @@ export function acquireTarget(tower) {
 }
 
 function updateBarracks(tower, dt) {
-  const def = tower.def;
+  const def = tower.stats;   // spec overrides folded in by computeStats
   for (const s of tower.soldiers) {
     if (!s.alive) {
       s.respawn -= dt;
@@ -429,7 +482,7 @@ function updateHero(dt) {
     hero.attackCd -= dt;
     if (hero.attackCd <= 0) {
       // damage scales with hero level; XP = damage dealt + bounty on the kill
-      const dmg = HERO_LEVELING.damageAt(def, hero.level);
+      const dmg = HERO_LEVELING.damageAt(def, hero.level) * heroPowerMul();
       damageEnemy(hero.target, dmg, !!def.magic);
       awardHeroXp(hero, dmg + (hero.target.dead ? hero.target.reward : 0));
       hero.attackCd = def.attackInterval;
@@ -461,7 +514,7 @@ function updateHero(dt) {
       if (best) {
         state.projectiles.push({
           x: hero.x, y: hero.y - 10, target: best,
-          damage: HERO_LEVELING.damageAt(def, hero.level),
+          damage: HERO_LEVELING.damageAt(def, hero.level) * heroPowerMul(),
           speed: def.projectileSpeed, color: def.projColor,
           attack: "single", splashRadius: 0, magic: !!def.magic,
           hitsAir: true, fromHero: true, dead: false,

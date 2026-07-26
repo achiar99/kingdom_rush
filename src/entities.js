@@ -1,9 +1,12 @@
 // Factories + stat math for enemies, towers, barracks soldiers and the hero.
 import { SELL_REFUND } from "./config.js";
-import { TOWER_TYPES } from "./data/towerTypes.js";
+import { TOWER_TYPES, specDef } from "./data/towerTypes.js";
 import { HERO_LEVELING } from "./data/hero.js";
 import { SUMMON } from "./data/abilities.js";
-import { towerDamageMul, splashRadiusMul, soldierHpMul, soldierDamageMul, summonHpMul } from "./data/store.js";
+import {
+  towerDamageMul, splashRadiusMul, soldierHpMul, soldierDamageMul, summonHpMul,
+  towerRangeMul, towerFireRateMul, heroPowerMul, sellRefundBonus,
+} from "./data/store.js";
 import { nearestPointOnPath } from "./geometry.js";
 import { state, PATH, KIT } from "./state.js";
 
@@ -38,33 +41,51 @@ export function makeTower(spot, typeKey) {
   if (type.attack === "none") {
     t.rally = nearestPointOnPath(PATH, spot.x, spot.y);
     t.soldiers = [];
-    for (let i = 0; i < type.soldierCount; i++) t.soldiers.push(makeSoldier(t, i));
+    for (let i = 0; i < t.soldierCount; i++) t.soldiers.push(makeSoldier(t, i));
   }
   return t;
 }
 
-// Derive a tower's live stats from its base def, current level and the star
-// store's permanent bonuses. Called on build and after each upgrade so all
-// combat code can read t.range/t.damage/etc.
+// Derive a tower's live stats from its base def, current level, chosen
+// specialisation and the star store's permanent bonuses. Called on build,
+// after each upgrade, and when a specialisation is taken, so all combat code
+// can just read t.range / t.damage / t.chain / etc.
+//
+// Layering, outermost last: base def → specialisation overrides → level
+// scaling → store multipliers. A spec's numbers are written as finished ★★★
+// values, so level scaling is skipped once one is chosen.
 export function computeStats(t) {
-  const d = t.def, m = t.level - 1;
-  t.range = d.range * (1 + 0.12 * m);
-  if (d.attack !== "none") {
+  const base = t.def;
+  const spec = t.spec ? specDef(t.type, t.spec) : null;
+  const d = spec ? { ...base, ...spec } : base;
+  const m = spec ? 0 : t.level - 1;   // specs are already fully levelled
+
+  t.stats = d;                        // what combat should read for behaviour
+  t.range = d.range * (1 + 0.12 * m) * towerRangeMul();
+  t.hitsAir = !!d.hitsAir;
+
+  if (base.attack !== "none") {
     t.damage = Math.round(d.damage * (1 + 0.45 * m) * towerDamageMul(t.type));
-    t.fireRate = d.fireRate * (1 + 0.15 * m);
+    t.fireRate = d.fireRate * (1 + 0.15 * m) * towerFireRateMul();
     t.projectileSpeed = d.projectileSpeed;
     t.splashRadius = d.splashRadius ? d.splashRadius * (1 + 0.12 * m) * splashRadiusMul() : 0;
+    // Specialisation effects, passed straight through to the projectile.
+    t.chain = d.chain || 0;
+    t.slow = d.slow || null;
+    t.dot = d.dot || null;
+    t.airBonus = d.airBonus || 1;
   } else {
+    t.soldierCount = d.soldierCount;
     t.soldierHp = Math.round(d.soldierHp * (1 + 0.4 * m) * soldierHpMul());
     t.soldierDamage = Math.round(d.soldierDamage * (1 + 0.45 * m) * soldierDamageMul());
   }
 }
 
 export function upgradeCost(t) { return Math.round(t.def.cost * (0.8 + 0.6 * t.level)); }
-export function sellValue(t) { return Math.round(t.invested * SELL_REFUND); }
+export function sellValue(t) { return Math.round(t.invested * (SELL_REFUND + sellRefundBonus())); }
 
 export function makeSoldier(tower, i) {
-  const angle = (i / tower.def.soldierCount) * Math.PI * 2;
+  const angle = (i / tower.soldierCount) * Math.PI * 2;
   const home = {
     x: tower.rally.x + Math.cos(angle) * 14,
     y: tower.rally.y + Math.sin(angle) * 14,
@@ -86,7 +107,7 @@ export function makeSoldier(tower, i) {
 export function relocateRally(tower, newRally) {
   tower.rally = newRally;
   tower.soldiers.forEach((s, i) => {
-    const angle = (i / tower.def.soldierCount) * Math.PI * 2;
+    const angle = (i / tower.soldierCount) * Math.PI * 2;
     s.home = {
       x: newRally.x + Math.cos(angle) * 14,
       y: newRally.y + Math.sin(angle) * 14,
@@ -97,7 +118,7 @@ export function relocateRally(tower, newRally) {
 }
 
 export function makeHero(pos, def) {
-  const maxHp = HERO_LEVELING.maxHpAt(def, 1);
+  const maxHp = Math.round(HERO_LEVELING.maxHpAt(def, 1) * heroPowerMul());
   return {
     def, x: pos.x, y: pos.y, commandPos: { x: pos.x, y: pos.y },
     level: 1, xp: 0,                  // grows by fighting — see gainHeroXp
@@ -117,7 +138,7 @@ export function gainHeroXp(hero, amount) {
   while (hero.level < HERO_LEVELING.maxLevel && hero.xp >= HERO_LEVELING.xpForNext(hero.level)) {
     hero.xp -= HERO_LEVELING.xpForNext(hero.level);
     hero.level++;
-    hero.maxHp = HERO_LEVELING.maxHpAt(hero.def, hero.level);
+    hero.maxHp = Math.round(HERO_LEVELING.maxHpAt(hero.def, hero.level) * heroPowerMul());
     hero.hp = hero.maxHp;
     leveled = true;
     state.effects.push({ x: hero.x, y: hero.y, maxR: 42, life: 0.6, maxLife: 0.6, kind: "levelup" });

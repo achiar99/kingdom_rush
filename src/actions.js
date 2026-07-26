@@ -6,7 +6,7 @@
 // exactly the same functions from a bot. That shared path is the point: a
 // simulated run can't accidentally play by different rules than a real one.
 import { MAX_LEVEL } from "./config.js";
-import { TOWER_TYPES } from "./data/towerTypes.js";
+import { TOWER_TYPES, specDef } from "./data/towerTypes.js";
 import { towerUnlockWave, abilityUnlockWave, currentWave, maxTowerLevelFor } from "./data/unlocks.js";
 import { ABILITY_COOLDOWN, SUMMON, FIRE } from "./data/abilities.js";
 import { summonCountBonus, fireDpsMul, fireDurationBonus } from "./data/store.js";
@@ -14,7 +14,7 @@ import { dist, nearestPointOnPath } from "./geometry.js";
 import { state, PATH, LEVEL, spotOccupied } from "./state.js";
 import {
   makeTower, computeStats, upgradeCost, sellValue, relocateRally,
-  makeSummonedSoldier, commandHero,
+  makeSoldier, makeSummonedSoldier, commandHero,
 } from "./entities.js";
 
 const OK = { ok: true };
@@ -54,6 +54,7 @@ export function buildTower(spot, key) {
 }
 
 export function canUpgrade(t) {
+  if (t.spec) return no("Specialised");
   if (t.level >= MAX_LEVEL) return no("Max level");
   if (t.level >= maxTowerLevelFor(LEVEL.index)) return no("Upgrades unlock in later realms");
   const cost = upgradeCost(t);
@@ -69,6 +70,37 @@ export function upgradeTower(t) {
   t.level++;
   t.invested += cost;
   computeStats(t);
+  return OK;
+}
+
+// ---------------------------------------------------- specialisations
+// Offered once a tower is fully upgraded, and only where the realm allows
+// full upgrades in the first place. Choosing one is permanent for that spot —
+// selling and rebuilding is the only way back, which is what makes it a
+// decision rather than a menu.
+export function canSpecialize(t, specKey) {
+  if (t.spec) return no("Already specialised.");
+  if (t.level < Math.min(MAX_LEVEL, maxTowerLevelFor(LEVEL.index)))
+    return no("Fully upgrade this tower first.");
+  const spec = specDef(t.type, specKey);
+  if (!spec) return no("No such specialisation.");
+  if (state.gold < spec.cost) return no("Not enough gold (need " + spec.cost + ").");
+  return OK;
+}
+
+export function specializeTower(t, specKey) {
+  const check = canSpecialize(t, specKey);
+  if (!check.ok) return check;
+  const spec = specDef(t.type, specKey);
+  state.gold -= spec.cost;
+  t.invested += spec.cost;
+  t.spec = specKey;
+  computeStats(t);
+  // A barracks specialisation can change the squad size, so rebuild it.
+  if (t.def.attack === "none") {
+    t.soldiers = [];
+    for (let i = 0; i < t.soldierCount; i++) t.soldiers.push(makeSoldier(t, i));
+  }
   return OK;
 }
 

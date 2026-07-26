@@ -7,7 +7,7 @@
 // from each other; safe circularity, since every cross-reference is only
 // *called* inside a function body, long after both have finished loading.
 import { CONFIG, MAX_LEVEL } from "./config.js";
-import { TOWER_TYPES, TYPE_LIST } from "./data/towerTypes.js";
+import { TOWER_TYPES, TYPE_LIST, specDef, specsFor } from "./data/towerTypes.js";
 import { LEVELS, wavesFor } from "./data/levels.js";
 import { maxTowerLevelFor } from "./data/unlocks.js";
 import { ENEMY_KITS, ROLES } from "./data/enemyKits.js";
@@ -102,19 +102,43 @@ function openManageMenu(tower) {
   const stars = "★".repeat(tower.level) + "☆".repeat(MAX_LEVEL - tower.level);
   towerMenu.innerHTML = "";
 
+  const spec = tower.spec ? specDef(tower.type, tower.spec) : null;
   const head = document.createElement("div");
   head.className = "thead";
-  head.innerHTML = `<b>${def.icon} ${def.name}</b><div class="stars">${stars}</div>`;
+  head.innerHTML = spec
+    ? `<b>${spec.icon} ${spec.name}</b><div class="stars">specialised</div>`
+    : `<b>${def.icon} ${def.name}</b><div class="stars">${stars}</div>`;
   towerMenu.appendChild(head);
 
-  const up = document.createElement("button");
-  up.className = "up";
-  up.disabled = maxed || capped || state.gold < upCost;
-  up.textContent = maxed ? "Max level"
-    : capped ? "🔒 Upgrades unlock in later realms"
-    : `⬆ Upgrade  💰${upCost}`;
-  up.addEventListener("click", (ev) => { ev.stopPropagation(); upgradeTower(tower); });
-  towerMenu.appendChild(up);
+  if (!spec) {
+    const up = document.createElement("button");
+    up.className = "up";
+    up.disabled = maxed || capped || state.gold < upCost;
+    up.textContent = maxed ? "Fully upgraded"
+      : capped ? "🔒 Upgrades unlock in later realms"
+      : `⬆ Upgrade  💰${upCost}`;
+    up.addEventListener("click", (ev) => { ev.stopPropagation(); upgradeTower(tower); });
+    towerMenu.appendChild(up);
+  }
+
+  // At full level the tower offers its two branches instead. Both are shown
+  // even when unaffordable — knowing what you're saving for is the point.
+  if (!spec && (maxed || capped)) {
+    const note = document.createElement("div");
+    note.className = "spec-note";
+    note.textContent = "Choose a path — permanent";
+    towerMenu.appendChild(note);
+    for (const s of specsFor(tower.type)) {
+      const btn = document.createElement("button");
+      btn.className = "spec";
+      btn.disabled = !act.canSpecialize(tower, s.key).ok;
+      btn.innerHTML = `<span class="sp-name">${s.icon} ${s.name}</span>` +
+        `<span class="sp-cost">💰${s.cost}</span>` +
+        `<span class="sp-blurb">${s.blurb}</span>`;
+      btn.addEventListener("click", (ev) => { ev.stopPropagation(); specializeTower(tower, s.key); });
+      towerMenu.appendChild(btn);
+    }
+  }
 
   if (tower.type === "barracks") {
     const move = document.createElement("button");
@@ -150,6 +174,13 @@ function upgradeTower(t) {
   setTip(res.ok ? "" : res.reason);
   updateHud();
   if (res.ok) openManageMenu(t); // refresh the panel with new level / costs
+}
+
+function specializeTower(t, specKey) {
+  const res = act.specializeTower(t, specKey);
+  setTip(res.ok ? "" : res.reason);
+  updateHud();
+  if (res.ok) openManageMenu(t);   // redraw as the specialised tower
 }
 
 function sellTower(t) {
@@ -292,9 +323,16 @@ function refreshManageMenu() {
   if (!state.selected || !towerMenu.classList.contains("show")) return;
   const t = state.selected;
   const up = towerMenu.querySelector(".up");
-  if (!up) return;
-  const maxed = t.level >= maxTowerLevelFor(LEVEL.index);
-  up.disabled = maxed || state.gold < upgradeCost(t);
+  if (up) {
+    const maxed = t.level >= maxTowerLevelFor(LEVEL.index);
+    up.disabled = maxed || state.gold < upgradeCost(t);
+  }
+  // Specialisation buttons track affordability the same way, so a path
+  // becomes clickable the moment the kill that pays for it lands.
+  const specs = specsFor(t.type);
+  towerMenu.querySelectorAll(".spec").forEach((btn, i) => {
+    if (specs[i]) btn.disabled = !act.canSpecialize(t, specs[i].key).ok;
+  });
 }
 
 export function updateButtons() {

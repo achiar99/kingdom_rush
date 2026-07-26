@@ -8,7 +8,7 @@
 // Skill is a small set of knobs (how well it picks spots, how fast it reacts,
 // how much gold it lets sit idle). Sampling those knobs is what turns a
 // deterministic simulation into a distribution of outcomes.
-import { TOWER_TYPES, TYPE_LIST } from "../../src/data/towerTypes.js";
+import { TOWER_TYPES, TYPE_LIST, specsFor } from "../../src/data/towerTypes.js";
 import { ENEMY_KITS } from "../../src/data/enemyKits.js";
 import { wavesFor } from "../../src/data/levels.js";
 import { maxTowerLevelFor } from "../../src/data/unlocks.js";
@@ -124,9 +124,11 @@ function armyDps(threat) {
   for (const t of state.towers) {
     if (t.def.attack === "none") { barracks++; continue; }
     const armorPass = t.type === "magic" ? 1 : 1 - threat.avgArmor;
-    const hits = t.def.attack === "splash" ? Math.min(3.2, 1 + threat.density * 0.55) : 1;
-    const airPass = t.def.hitsAir ? 1 : 1 - threat.flyingShare;
-    attack += t.damage * t.fireRate * hits * armorPass * airPass;
+    // Splash and chain both multiply how many creeps one shot touches.
+    const spread = t.def.attack === "splash" ? Math.min(3.2, 1 + threat.density * 0.55)
+                 : Math.max(1, t.chain || 1);
+    const airPass = t.hitsAir ? 1 : 1 - threat.flyingShare;
+    attack += t.damage * t.fireRate * spread * armorPass * airPass;
   }
   return { attack, barracks };
 }
@@ -163,6 +165,26 @@ function marginalValuePerGold(key, threat, army) {
     dps = d.damage * d.fireRate * armorPass;
   }
   return dps / d.cost;
+}
+
+// Expected damage per second of a specialisation against `threat`. Same
+// shape as marginalValuePerGold, but a spec's numbers are absolute rather
+// than a delta, and it has effects the base towers don't.
+function specValue(spec, threat) {
+  if (spec.soldierCount) {
+    // A barracks branch: blocking value scaled by squad size and toughness.
+    return (spec.soldierDamage * spec.soldierCount / (spec.soldierAttackInterval || 0.8))
+      * (1 - threat.avgArmor) * (1 - threat.flyingShare) * 2.5;
+  }
+  const armorPass = spec.dot ? 1 : 1 - threat.avgArmor;   // burns ignore armour
+  const spread = spec.chain ? spec.chain
+    : spec.splashRadius ? Math.min(3.2, 1 + threat.density * 0.55) : 1;
+  const airPass = spec.hitsAir === false ? 1 - threat.flyingShare : 1;
+  const air = spec.airBonus ? 1 + (spec.airBonus - 1) * threat.flyingShare : 1;
+  let dps = spec.damage * spec.fireRate * spread * armorPass * airPass * air;
+  if (spec.dot) dps += spec.dot.dps * Math.min(1, spec.dot.dur * spec.fireRate);
+  if (spec.slow) dps *= 1.25;   // slowing buys every other tower more shots
+  return dps;
 }
 
 // ---------------------------------------------------------------- the bot
@@ -233,8 +255,14 @@ export class Bot {
   buyOnce(threat) {
     const budget = this.spendable();
     const army = armyDps(threat);
+    const spec = this.bestSpec(threat);
     const upgrade = this.bestUpgrade(threat, army);
     const build = this.bestBuild(threat, army);
+
+    // Specialisations are the biggest single power jump available, so they
+    // take priority once affordable — a player who can afford one and buys a
+    // fourth Toxotai instead is not the player the balance targets describe.
+    if (spec && spec.cost <= budget) return act.specializeTower(spec.tower, spec.key).ok;
 
     // Prefer upgrading only if this player leans that way and it's affordable.
     if (upgrade && upgrade.cost <= budget && (!build || this.rng.chance(this.p.upgradeBias)))
@@ -278,6 +306,24 @@ export class Bot {
       : this.rng.weighted(scored, (s) => s.score + 1);
     if (chosen.score === 0) return null; // a spot that covers no road at all
     return { spot: chosen.spot, key, cost: TOWER_TYPES[key].cost };
+  }
+
+  // Which fully-upgraded tower should branch, and down which path. Weaker
+  // players pick a path at random; stronger ones read the wave.
+  bestSpec(threat) {
+    let best = null, bestV = -Infinity;
+    for (const t of state.towers) {
+      const options = specsFor(t.type).filter((s) => act.canSpecialize(t, s.key).ok);
+      if (!options.length) continue;
+      const cover = coverage(this.samples, t.x, t.y, t.range);
+      if (cover === 0) continue;
+      const pick = this.rng.chance(this.p.typeAccuracy)
+        ? options.reduce((a, b) => (specValue(b, threat) > specValue(a, threat) ? b : a))
+        : this.rng.pick(options);
+      const v = (specValue(pick, threat) * cover) / pick.cost;
+      if (v > bestV) { bestV = v; best = { tower: t, key: pick.key, cost: pick.cost }; }
+    }
+    return best;
   }
 
   // The upgrade that buys the most extra coverage-weighted damage per gold.

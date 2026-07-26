@@ -46,3 +46,80 @@ export const TOWER_TYPES = {
 };
 
 export const TYPE_LIST = ["archer", "artillery", "barracks", "magic"];
+
+// ---------------------------------------------------------- specialisations
+// A tower climbs ★→★★→★★★ on gold the way it always has. At ★★★ it stops
+// taking generic upgrades and offers a one-time, irreversible choice between
+// two specialisations — the point in the game where upgrading stops being
+// "the number goes up" and starts being a decision about what this spot is
+// FOR. Two of them deliberately shore up the base tower's weakness at the
+// cost of its strength, so the choice reads differently on every map.
+//
+// Fields listed here REPLACE the tower's own; anything omitted is inherited
+// from the ★★★ stats. The effects (`chain`, `slow`, `dot`, `airBonus`) are
+// the four primitives simulation.js knows how to apply.
+export const SPECS = {
+  archer: {
+    cretan: {
+      key: "cretan", name: "Cretan Archers", icon: "🏹", cost: 240,
+      blurb: "Massed volleys. Each shot carries on into two more targets.",
+      damage: 26, fireRate: 2.3, chain: 3,
+      palette: { light: "#f2e6c4", mid: "#bfa05e", dark: "#6f5824" },
+    },
+    amazon: {
+      key: "amazon", name: "Amazon Longbows", icon: "🎯", cost: 260,
+      blurb: "Enormous reach, and they punish anything that dares to fly.",
+      damage: 40, fireRate: 1.5, range: 205, airBonus: 2.0,
+      palette: { light: "#e6dcc0", mid: "#9fae72", dark: "#4f5c2c" },
+    },
+  },
+  artillery: {
+    siege: {
+      key: "siege", name: "Siege Ballista", icon: "💥", cost: 300,
+      blurb: "A wider, heavier blast. Still cannot be aimed at the sky.",
+      damage: 62, fireRate: 0.6, splashRadius: 78,
+      palette: { light: "#dcb489", mid: "#8a5a2c", dark: "#472a0e" },
+    },
+    scorpion: {
+      key: "scorpion", name: "Scorpion Battery", icon: "🦂", cost: 320,
+      blurb: "Swivel-mounted and crippling — it finally reaches flyers, and " +
+             "what it hits crawls.",
+      damage: 34, fireRate: 0.95, splashRadius: 44, hitsAir: true,
+      slow: { mul: 0.5, dur: 2.2 },
+      palette: { light: "#cfd8c0", mid: "#75845e", dark: "#3a442a" },
+    },
+  },
+  magic: {
+    delphi: {
+      key: "delphi", name: "Seers of Delphi", icon: "⚡", cost: 340,
+      blurb: "The prophecy arcs from one doomed creature to the next.",
+      damage: 62, fireRate: 1.2, chain: 4,
+      palette: { light: "#f6f2e8", mid: "#a8bcc8", dark: "#546672" },
+    },
+    hekate: {
+      key: "hekate", name: "Shrine of Hekate", icon: "☠️", cost: 360,
+      blurb: "A slow curse that keeps burning long after the bolt lands.",
+      damage: 78, fireRate: 0.85, dot: { dps: 26, dur: 4 },
+      palette: { light: "#e8dcf4", mid: "#9a7ab8", dark: "#4c3663" },
+    },
+  },
+  barracks: {
+    spartiate: {
+      key: "spartiate", name: "Spartiates", icon: "🛡️", cost: 280,
+      blurb: "Three men who simply do not break. Nothing gets past them.",
+      soldierHp: 190, soldierDamage: 22, soldierCount: 3,
+      soldierRegenRate: 9, soldierRespawn: 5,
+      palette: { light: "#e8cf8e", mid: "#a8762c", dark: "#5e400e" },
+    },
+    myrmidon: {
+      key: "myrmidon", name: "Myrmidons", icon: "⚔️", cost: 300,
+      blurb: "Four of them, and they go looking for the fight.",
+      soldierHp: 115, soldierDamage: 34, soldierCount: 4,
+      soldierAttackInterval: 0.6, soldierRespawn: 4, range: 105,
+      palette: { light: "#d8c0e0", mid: "#7a5a96", dark: "#3c2a52" },
+    },
+  },
+};
+
+export const specsFor = (typeKey) => Object.values(SPECS[typeKey] || {});
+export const specDef = (typeKey, specKey) => (SPECS[typeKey] || {})[specKey] || null;

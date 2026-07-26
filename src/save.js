@@ -33,8 +33,11 @@ const slotKey = (i) => `towerRealm.slot.${i}`;
 // Upgrade-store track keys — mirrors TRACKS in data/store.js (kept as a
 // literal here so sanitizing at module-load time never races the circular
 // store.js → save.js import).
-const UPGRADE_KEYS = ["archer", "artillery", "magic", "barracks", "summon", "fire"];
-const UPGRADE_MAX_RANK = 3;
+const UPGRADE_KEYS = [
+  "archer", "artillery", "magic", "barracks", "summon", "fire",
+  "hero", "treasury", "walls", "range", "haste", "salvage",
+];
+const UPGRADE_MAX_RANK = 5;
 
 // difficultyKey is chosen once, when a slot is first created (see selectSlot).
 function defaultProgress(difficultyKey) {
