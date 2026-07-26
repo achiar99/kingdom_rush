@@ -10,6 +10,7 @@ import { state, loadLevel } from "./state.js";
 import { progress, getStars } from "./save.js";
 import { closeMenus, resetGame } from "./ui.js";
 import { refreshStoreButton } from "./store.js";
+import { refreshHeroPickButton } from "./heroPicker.js";
 
 export function showMap() {
   state.paused = true;                 // freeze any in-progress game underneath
@@ -40,6 +41,7 @@ function trailD(p) {
 
 export function renderMap() {
   refreshStoreButton();
+  refreshHeroPickButton();
 
   // blurred terrain glow per realm (tinted with its theme) + the dashed trail
   const svg = el("mapTrail");

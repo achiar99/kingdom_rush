@@ -8,7 +8,7 @@
 import { CONFIG } from "./config.js";
 import { wavesFor } from "./data/levels.js";
 import { newUnlocksAt } from "./data/unlocks.js";
-import { HERO, HERO_LEVELING } from "./data/hero.js";
+import { HERO_LEVELING } from "./data/hero.js";
 import { FIRE, SUMMON } from "./data/abilities.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
@@ -157,7 +157,17 @@ function onProjectileHit(p) {
     state.effects.push({ x: ix, y: iy, maxR: p.splashRadius, life: 0.35, maxLife: 0.35, color: "#ffb057" });
   } else {
     damageEnemy(p.target, p.damage, p.magic);
+    // ranged heroes earn their XP when the arrow/bolt actually lands
+    if (p.fromHero && state.hero)
+      awardHeroXp(state.hero, p.damage + (p.target.dead ? p.target.reward : 0));
   }
+}
+
+// gainHeroXp + the level-up announcement, shared by melee hits and projectiles
+function awardHeroXp(hero, xp) {
+  if (gainHeroXp(hero, xp))
+    setTip("⭐ " + hero.def.name + " reached level " + hero.level +
+      (hero.level >= HERO_LEVELING.maxLevel ? " — max power!" : "!"));
 }
 
 // "Reinforcements" ability units — combat is the same shape as a Barracks
@@ -291,10 +301,17 @@ function updateHero(dt) {
     return;
   }
 
+  const def = hero.def;
+
   // passive regen once it's been a few seconds since the hero last took a hit
   hero.sinceHit += dt;
-  if (hero.sinceHit >= HERO.regenDelay && hero.hp < hero.maxHp)
-    hero.hp = Math.min(hero.maxHp, hero.hp + HERO_LEVELING.regenAt(hero.level) * dt);
+  if (hero.sinceHit >= def.regenDelay && hero.hp < hero.maxHp)
+    hero.hp = Math.min(hero.maxHp, hero.hp + HERO_LEVELING.regenAt(def, hero.level) * dt);
+
+  // Melee heroes chase anything inside their aggro radius; ranged heroes
+  // hold their ground and only grapple creeps that walk right into them
+  // (their real weapon is the shooting block further down).
+  const aggro = def.attack === "ranged" ? def.meleeRange : def.aggroRadius;
 
   // While under orders (forcedMove), skip target-acquisition entirely — the
   // hero ignores every enemy, not just the one it was just fighting, so a
@@ -303,15 +320,15 @@ function updateHero(dt) {
   if (!hero.forcedMove) {
     // drop dead / too-far targets — leashed to the hero's OWN current position,
     // not a fixed point, since it roams instead of sitting at one tower
-    if (hero.target && (hero.target.dead || dist(hero.x, hero.y, hero.target.x, hero.target.y) > HERO.aggroRadius))
+    if (hero.target && (hero.target.dead || dist(hero.x, hero.y, hero.target.x, hero.target.y) > aggro))
       hero.target = null;
-    // acquire nearest ground enemy within aggro radius (flyers can't be reached)
+    // acquire nearest ground enemy within aggro radius (flyers can't be blocked)
     if (!hero.target) {
       let best = null, bestD = Infinity;
       for (const e of state.enemies) {
         if (e.dead || e.flying) continue;
         const d = dist(hero.x, hero.y, e.x, e.y);
-        if (d <= HERO.aggroRadius && d < bestD) { best = e; bestD = d; }
+        if (d <= aggro && d < bestD) { best = e; bestD = d; }
       }
       hero.target = best;
     }
@@ -320,31 +337,52 @@ function updateHero(dt) {
   const dest = hero.target || hero.commandPos;
   const d = dist(hero.x, hero.y, dest.x, dest.y);
   if (hero.forcedMove && d <= 1) hero.forcedMove = false; // arrived — resume normal behavior
-  if (hero.target && d <= HERO.meleeRange) {
+  const inMelee = hero.target && d <= def.meleeRange;
+  if (inMelee) {
     // locked in melee: block the creep and trade blows
     hero.target.engaged = true;
     hero.attackCd -= dt;
     if (hero.attackCd <= 0) {
       // damage scales with hero level; XP = damage dealt + bounty on the kill
-      const dmg = HERO_LEVELING.damageAt(hero.level);
-      damageEnemy(hero.target, dmg);
-      let xp = dmg;
-      if (hero.target.dead) xp += hero.target.reward;
-      if (gainHeroXp(hero, xp))
-        setTip("⭐ Hero reached level " + hero.level + (hero.level >= HERO_LEVELING.maxLevel ? " — max power!" : "!"));
-      hero.attackCd = HERO.attackInterval;
+      const dmg = HERO_LEVELING.damageAt(def, hero.level);
+      damageEnemy(hero.target, dmg, !!def.magic);
+      awardHeroXp(hero, dmg + (hero.target.dead ? hero.target.reward : 0));
+      hero.attackCd = def.attackInterval;
     }
     hero.target.attackCd -= dt;
     if (hero.target.attackCd <= 0) {
       hero.hp -= CONFIG.enemy.meleeDamage;
       hero.sinceHit = 0; // reset the regen clock — just took a hit
       hero.target.attackCd = CONFIG.enemy.attackInterval;
-      if (hero.hp <= 0) { hero.alive = false; hero.respawn = HERO.respawnTime; hero.target = null; }
+      if (hero.hp <= 0) { hero.alive = false; hero.respawn = def.respawnTime; hero.target = null; }
     }
   } else if (d > 1) {
     // walk toward target (to intercept) or back to the commanded position
-    const step = HERO.speed * dt;
+    const step = def.speed * dt;
     hero.x += ((dest.x - hero.x) / d) * Math.min(step, d);
     hero.y += ((dest.y - hero.y) / d) * Math.min(step, d);
+  }
+
+  // ranged heroes: whenever not grappled (and not under a move order), shoot
+  // the furthest-along enemy in range — including flyers
+  if (def.attack === "ranged") {
+    hero.shootCd -= dt;
+    if (hero.shootCd <= 0 && !inMelee && !hero.forcedMove) {
+      let best = null, bestDist = -1;
+      for (const e of state.enemies) {
+        if (e.dead) continue;
+        if (dist(hero.x, hero.y, e.x, e.y) <= def.range && e.dist > bestDist) { best = e; bestDist = e.dist; }
+      }
+      if (best) {
+        state.projectiles.push({
+          x: hero.x, y: hero.y - 10, target: best,
+          damage: HERO_LEVELING.damageAt(def, hero.level),
+          speed: def.projectileSpeed, color: def.projColor,
+          attack: "single", splashRadius: 0, magic: !!def.magic,
+          fromHero: true, dead: false,
+        });
+        hero.shootCd = def.attackInterval;
+      }
+    }
   }
 }

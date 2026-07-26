@@ -9,7 +9,7 @@ import { LEVELS, wavesFor } from "./data/levels.js";
 import { currentWave, towerUnlockWave, abilityUnlockWave, maxTowerLevelFor } from "./data/unlocks.js";
 import { summonCountBonus, fireDpsMul, fireDurationBonus } from "./data/store.js";
 import { ABILITY_COOLDOWN, SUMMON, FIRE } from "./data/abilities.js";
-import { HERO_LEVELING } from "./data/hero.js";
+import { HEROES, DEFAULT_HERO, HERO_LEVELING } from "./data/hero.js";
 import { el } from "./dom.js";
 import { dist, nearestPointOnPath } from "./geometry.js";
 import { state, PATH, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
@@ -19,7 +19,7 @@ import {
 } from "./entities.js";
 import { canvas } from "./render.js";
 import { startNextWave } from "./simulation.js";
-import { markComplete, unlockLevel, wipeProgress, getDifficulty } from "./save.js";
+import { progress, markComplete, unlockLevel, wipeProgress, getDifficulty } from "./save.js";
 import { showMap, startLevel } from "./worldmap.js";
 import { showSlotSelect } from "./slots.js";
 
@@ -430,12 +430,14 @@ el("abilityFire").addEventListener("click", () => {
 export function resetGame() {
   const diff = getDifficulty();
   const endP = PATH[PATH.length - 1];
+  const heroDef = HEROES[progress.hero] || HEROES[DEFAULT_HERO];
+  el("heroPortrait").querySelector(".icon").textContent = heroDef.icon;
   Object.assign(state, {
     gold: Math.round(LEVEL.startGold * diff.goldMul),
     lives: Math.round(LEVEL.startLives * diff.livesMul),
     waveIndex: -1,
     enemies: [], towers: [], projectiles: [], effects: [],
-    hero: makeHero({ x: endP.x - 70, y: endP.y }), // starts guarding the castle
+    hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
     summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
     spawnQueue: [], spawnTimer: 0,
     running: false, over: false, paused: false, speed: 1,

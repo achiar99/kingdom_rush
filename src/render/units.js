@@ -1,6 +1,5 @@
 // Friendly units: the knight rig shared by barracks soldiers, summoned
 // reinforcements and the hero.
-import { HERO } from "../data/hero.js";
 import { SUMMON } from "../data/abilities.js";
 import { state } from "../state.js";
 import { ctx, groundShadow, shadedEllipse } from "./canvas.js";
@@ -50,23 +49,14 @@ function drawKnight(x, y, o) {
   ctx.stroke();
   ctx.beginPath(); ctx.arc(-7.8, 0.4, 1.2, 0, Math.PI * 2); ctx.fillStyle = "#3c4356"; ctx.fill();
 
-  // sword arm: swings while fighting, rests at the shoulder otherwise
+  // weapon arm: swings while fighting, rests at the shoulder otherwise
   const swing = o.fighting ? -0.5 + Math.sin(now / 90) * 0.65 : -0.95 + step * 0.07;
   ctx.save();
   ctx.translate(6.3, -1);
   ctx.rotate(swing);
   ctx.fillStyle = "#f2c79b";
   ctx.beginPath(); ctx.arc(0, 0, 2.1, 0, Math.PI * 2); ctx.fill();
-  const bg = ctx.createLinearGradient(0, -2, 0, -14);
-  bg.addColorStop(0, "#9aa3b8");
-  bg.addColorStop(1, "#eef2fa");
-  ctx.fillStyle = bg;
-  ctx.beginPath();
-  ctx.moveTo(-1.1, -2); ctx.lineTo(-1.1, -12); ctx.lineTo(0, -14); ctx.lineTo(1.1, -12); ctx.lineTo(1.1, -2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.fillStyle = "#8a6a30";
-  ctx.fillRect(-2.9, -2.7, 5.8, 1.8);
+  drawWeapon(o.weapon || "sword");
   ctx.restore();
 
   // head, face, helmet
@@ -89,6 +79,56 @@ function drawKnight(x, y, o) {
     ctx.beginPath(); ctx.roundRect(-1.3, -17.8, 2.6, 5, 1.3); ctx.fill();
   }
   ctx.restore();
+}
+
+// Drawn in weapon-arm space: origin at the hand, "up" along -y. Each variant
+// stays roughly the same visual weight so the rig reads consistently.
+function drawWeapon(kind) {
+  if (kind === "bow") {
+    ctx.strokeStyle = "#6a4520";
+    ctx.lineWidth = 2.2;
+    ctx.beginPath(); ctx.arc(0, -7, 6, -Math.PI / 2.4, Math.PI / 2.4); ctx.stroke();
+    const bx = 6 * Math.cos(Math.PI / 2.4), by = 6 * Math.sin(Math.PI / 2.4);
+    ctx.strokeStyle = "rgba(240,240,255,0.8)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(bx, -7 - by); ctx.lineTo(bx, -7 + by); ctx.stroke();
+    return;
+  }
+  if (kind === "staff") {
+    ctx.fillStyle = "#6a4a26";
+    ctx.beginPath(); ctx.roundRect(-0.9, -16, 1.8, 16, 0.9); ctx.fill();
+    const g = ctx.createRadialGradient(0, -17, 0.5, 0, -17, 4.5);
+    g.addColorStop(0, "rgba(230,200,255,0.95)");
+    g.addColorStop(1, "rgba(150,90,220,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(0, -17, 4.5, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#a86be0";
+    ctx.beginPath(); ctx.arc(0, -17, 2.4, 0, Math.PI * 2); ctx.fill();
+    return;
+  }
+  if (kind === "hammer") {
+    ctx.fillStyle = "#6a4a26";
+    ctx.beginPath(); ctx.roundRect(-1.1, -13, 2.2, 13, 1); ctx.fill();
+    const g = ctx.createLinearGradient(0, -17, 0, -11);
+    g.addColorStop(0, "#d7dde8");
+    g.addColorStop(1, "#77809a");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.roundRect(-4.6, -17, 9.2, 6, 1.5); ctx.fill();
+    return;
+  }
+  const short = kind === "dagger";   // dagger = a slimmer, shorter sword
+  const len = short ? 9 : 14;
+  const bg = ctx.createLinearGradient(0, -2, 0, -len);
+  bg.addColorStop(0, "#9aa3b8");
+  bg.addColorStop(1, "#eef2fa");
+  ctx.fillStyle = bg;
+  const w = short ? 0.8 : 1.1;
+  ctx.beginPath();
+  ctx.moveTo(-w, -2); ctx.lineTo(-w, -(len - 2)); ctx.lineTo(0, -len); ctx.lineTo(w, -(len - 2)); ctx.lineTo(w, -2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = "#8a6a30";
+  ctx.fillRect(short ? -2.2 : -2.9, -2.7, short ? 4.4 : 5.8, 1.8);
 }
 
 function smallHpBar(x, y, hp, maxHp) {
@@ -152,12 +192,14 @@ export function drawHero(hero) {
     ctx.stroke();
   }
   groundShadow(hero.x + 2, hero.y + r * 0.8, r * 1.1, r * 0.45);
-  // gold-armored champion: red cape + plume set the hero apart from soldiers;
-  // grows subtly with each level earned in battle
+  // each hero def brings its own colors, weapon and build; every hero grows
+  // subtly with each level earned in battle
+  const def = hero.def;
   drawKnight(hero.x, hero.y, {
-    s: 1.35 + ((hero.level || 1) - 1) * 0.03, dir: faceTarget(hero), fighting: !!hero.target,
-    tunic: [HERO.colors.light, HERO.colors.mid, HERO.colors.dark],
-    helm: ["#ffe9a8", "#d9a222"], plume: "#c0392b", cape: "#a02c20",
+    s: def.figureScale + ((hero.level || 1) - 1) * 0.03,
+    dir: faceTarget(hero), fighting: !!hero.target, weapon: def.weapon,
+    tunic: [def.colors.light, def.colors.mid, def.colors.dark],
+    helm: def.helm, plume: def.plume, cape: def.cape,
   });
 
   const w = 34, h = 5, pct = Math.max(0, hero.hp / hero.maxHp);

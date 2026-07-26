@@ -10,6 +10,7 @@
 // for why.
 import { LEVELS } from "./data/levels.js";
 import { DIFFICULTIES } from "./data/difficulties.js";
+import { HEROES, DEFAULT_HERO } from "./data/hero.js";
 import { el } from "./dom.js";
 import { renderMap } from "./worldmap.js";
 
@@ -33,6 +34,7 @@ function defaultProgress(difficultyKey) {
     difficulty: DIFFICULTIES[difficultyKey] ? difficultyKey : "normal",
     stars: {},    // { [levelId]: 1|2|3 } — best star rating ever earned per level
     upgrades: {}, // { [trackKey]: rank } — star Upgrade Store purchases
+    hero: DEFAULT_HERO, // which champion this slot fields (picked on the map)
   };
 }
 
@@ -59,7 +61,8 @@ function sanitizeProgress(raw) {
     const n = Math.round(Number(upgRaw[key]));
     if (n >= 1) upgrades[key] = Math.min(UPGRADE_MAX_RANK, n);
   }
-  return { unlocked, done, updatedAt, difficulty, stars, upgrades };
+  const hero = HEROES[src.hero] ? src.hero : DEFAULT_HERO;
+  return { unlocked, done, updatedAt, difficulty, stars, upgrades, hero };
 }
 
 function readSlotRaw(i) {
