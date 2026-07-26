@@ -175,6 +175,14 @@ export function update(dt) {
     if (e.slowFor <= 0) { e.slowFor = 0; e.slowMul = 1; }
   }
 
+  // Wind down each creep's swing timer exactly once per frame.
+  //
+  // This used to be decremented by every blocker touching the creep, so a
+  // creep surrounded by three hoplites swung three times as fast as the same
+  // creep facing one — the phalanx was quietly making things worse the more
+  // of it there was. Blockers now only *check* whether the swing is ready.
+  for (const e of state.enemies) if (e.attackCd > 0) e.attackCd -= dt;
+
   // reset per-frame engagement flags; barracks soldiers re-set them
   for (const e of state.enemies) e.engaged = false;
 
@@ -397,7 +405,6 @@ function updateSummonedSoldiers(dt) {
       s.target.engaged = true;
       s.attackCd -= dt;
       if (s.attackCd <= 0) { damageEnemy(s.target, SUMMON.damage); s.attackCd = SUMMON.attackInterval; }
-      s.target.attackCd -= dt;
       if (s.target.attackCd <= 0) {
         enemyStrike(s.target, s);
         s.target.attackCd = s.target.meleeInterval;
@@ -473,7 +480,6 @@ function updateBarracks(tower, dt) {
       s.target.engaged = true;
       s.attackCd -= dt;
       if (s.attackCd <= 0) { damageEnemy(s.target, tower.soldierDamage); s.attackCd = def.soldierAttackInterval; }
-      s.target.attackCd -= dt;
       if (s.target.attackCd <= 0) {
         enemyStrike(s.target, s);
         s.target.attackCd = s.target.meleeInterval;
@@ -550,7 +556,6 @@ function updateHero(dt) {
       awardHeroXp(hero, dmg + (hero.target.dead ? hero.target.reward : 0));
       hero.attackCd = def.attackInterval;
     }
-    hero.target.attackCd -= dt;
     if (hero.target.attackCd <= 0) {
       enemyStrike(hero.target, hero);
       hero.target.attackCd = hero.target.meleeInterval;

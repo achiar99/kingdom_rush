@@ -263,7 +263,7 @@ const master = (name, colors, art, tweaks = {}) => ({
   // A master walks THROUGH a phalanx. It swings hard, swings fast, and every
   // swing cleaves the whole squad rather than one man at a time — three
   // hoplites should buy you a couple of seconds, not stop it dead.
-  melee: { damage: 78, interval: 0.6, cleave: 46 },
+  melee: { damage: 52, interval: 0.6, cleave: 46 },
   ...tweaks,
 });
 
