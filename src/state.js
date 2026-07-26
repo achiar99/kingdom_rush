@@ -5,6 +5,7 @@
 // ES module imports are live references, so when loadLevel() reassigns them
 // here, every module that imported them sees the new value automatically.
 import { LEVELS, THEMES } from "./data/levels.js";
+import { ENEMY_KITS } from "./data/enemyKits.js";
 import { pathLength } from "./geometry.js";
 
 export let PATH = [];
@@ -12,13 +13,16 @@ export let BUILD_SPOTS = [];
 export let PATH_LEN = 0;
 export let THEME = null;
 export let LEVEL = null; // current level def
+// The creature roster for this level's stage, keyed by role. Wave tables name
+// roles; this is what turns "swift" into a peltast or a Scylla hound.
+export let KIT = null;
 
 export function loadLevel(idx) {
   LEVEL = LEVELS[idx];
-  LEVEL.index = idx;
   PATH = LEVEL.path;
   BUILD_SPOTS = LEVEL.spots;
   THEME = THEMES[LEVEL.theme];
+  KIT = ENEMY_KITS[LEVEL.kit].creatures;
   PATH_LEN = pathLength(PATH);
 }
 
@@ -27,6 +31,7 @@ export const state = {
   enemies: [], towers: [], projectiles: [], effects: [], hero: null,
   summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
   spawnQueue: [], spawnTimer: 0,
+  nextWaveIn: 0,   // seconds until the next wave launches itself
   running: false, over: false, paused: false, speed: 1,
   hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
   heroSelected: false,

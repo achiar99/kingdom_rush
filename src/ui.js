@@ -10,6 +10,7 @@ import { CONFIG, MAX_LEVEL } from "./config.js";
 import { TOWER_TYPES, TYPE_LIST } from "./data/towerTypes.js";
 import { LEVELS, wavesFor } from "./data/levels.js";
 import { maxTowerLevelFor } from "./data/unlocks.js";
+import { ENEMY_KITS, ROLES } from "./data/enemyKits.js";
 import { HERO_LEVELING } from "./data/hero.js";
 import { el } from "./dom.js";
 import { dist } from "./geometry.js";
@@ -17,7 +18,7 @@ import { state, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
 import { upgradeCost, sellValue } from "./entities.js";
 import * as act from "./actions.js";
 import { canvas } from "./render.js";
-import { startNextWave, resetRun } from "./simulation.js";
+import { startNextWave, resetRun, earlyCallBonus } from "./simulation.js";
 import { installSimHooks } from "./simHooks.js";
 import { activeSlot, resetProgress } from "./save.js";
 import { showMap, startLevel, renderMap } from "./worldmap.js";
@@ -266,6 +267,7 @@ export function updateHud() {
 
   syncBuildMenu();
   refreshManageMenu();
+  updateButtons();   // the between-wave countdown lives on the Start button
 }
 
 // null when usable now; otherwise the lock label ("🔒" for the whole level,
@@ -299,9 +301,19 @@ export function updateButtons() {
   const btn = el("startBtn");
   if (state.over) { btn.disabled = true; return; }
   const waveCount = wavesFor(LEVEL).length;
-  btn.disabled = state.running || state.waveIndex + 1 >= waveCount;
-  btn.textContent = state.waveIndex === -1 ? "Start wave 1" : "Start wave " + (state.waveIndex + 2);
-  if (state.waveIndex + 1 >= waveCount && !state.running) btn.textContent = "All waves done";
+  const done = state.waveIndex + 1 >= waveCount;
+  btn.disabled = state.running || done;
+
+  if (done && !state.running) { btn.textContent = "All waves done"; return; }
+  if (state.running) { btn.textContent = "Wave " + (state.waveIndex + 1) + " incoming…"; return; }
+
+  // Between waves: show the countdown and what sending it early would pay, so
+  // the trade (build time vs. gold) is visible at the moment it's being made.
+  const label = "Send wave " + (state.waveIndex + 2);
+  const bonus = earlyCallBonus();
+  btn.textContent = bonus > 0
+    ? `${label} ⏱${Math.ceil(state.nextWaveIn)}s  +💰${bonus}`
+    : label;
 }
 
 export function setTip(msg) { el("tip").textContent = msg; }
@@ -397,10 +409,38 @@ el("abilityFire").addEventListener("click", () => armAbility("fire", {
   prompt: "Click where to set enemies ablaze. Esc to cancel.",
 }));
 
+// Both legends are generated rather than written into index.html, so they
+// can't drift out of step with the tower roster or the stage's enemy kit —
+// and so the enemy list actually tells you who you're fighting *here*.
+const ROLE_NOTE = {
+  swarm: "the rank and file",
+  swift: "fast, fragile, arrives in a rush",
+  shielded: "resists everything but the Oracle",
+  brute: "slow and very hard to kill",
+  winged: "flies — the Phalanx cannot touch it",
+  champion: "the wave's headline act",
+};
+
+function renderLegends() {
+  el("towerLegend").innerHTML = TYPE_LIST
+    .map((k) => TOWER_TYPES[k])
+    .map((d) => `<span>${d.icon} <b>${d.name}</b> — ${d.blurb}</span>`)
+    .join("");
+
+  const kit = ENEMY_KITS[LEVEL.kit];
+  el("enemyLegend").innerHTML =
+    `<span><b>${kit.name}:</b></span>` +
+    ROLES.map((role) => {
+      const c = kit.creatures[role];
+      return `<span><b>${c.name}</b> — ${ROLE_NOTE[role]}</span>`;
+    }).join("");
+}
+
 export function resetGame() {
   const { diff, heroDef } = resetRun();
   el("heroPortrait").querySelector(".icon").textContent = heroDef.icon;
   el("levelName").textContent = LEVEL.name + " · " + diff.icon + " " + diff.name;
+  renderLegends();
   el("speedBtn").textContent = "Speed: 1×";
   el("pauseBtn").textContent = "⏸ Pause";
   el("overlay").classList.remove("show");

@@ -30,7 +30,7 @@ function parseArgs(argv) {
     levels: null,               // null = all
     skills: [...SKILL_NAMES],
     difficulty: "normal",
-    hero: "knight",
+    hero: "achilles",
     upgrades: {},
     dt: DEFAULT_DT,
     seed0: 1,

@@ -4,18 +4,25 @@
 // means, and every one of those opinions is a constant you can argue with —
 // they're all collected in TARGETS so they're easy to find and re-tune.
 import { LEVELS, wavesFor } from "../../src/data/levels.js";
-import { ENEMY_TYPES } from "../../src/data/enemyTypes.js";
+import { ENEMY_KITS } from "../../src/data/enemyKits.js";
 import { TOWER_TYPES } from "../../src/data/towerTypes.js";
 import { DIFFICULTIES } from "../../src/data/difficulties.js";
 import { pathLength } from "../../src/geometry.js";
 import { mean } from "./stats.js";
 
 export const TARGETS = {
-  // The intended win-rate curve for a mid-skill player, from the first realm
+  // The intended win-rate curve for a mid-skill player, from the first level
   // to the last. Everything else is measured against this shape.
+  //
+  // Across a fifty-level campaign the curve is not a straight line: each
+  // stage introduces a new enemy kit, so the first level of a stage should
+  // give the player room to meet it before the screws tighten again. The
+  // target therefore descends overall while stepping back up a little at
+  // every stage boundary — see targetWinRate().
   averageWinRateFirst: 0.95,
   averageWinRateLast: 0.40,
   averageWinRateTolerance: 0.20,
+  stageOpeningRelief: 0.12,      // how much easier a stage's first level should be
 
   noviceFirstLevelFloor: 0.70,   // the opening realm must not wall a beginner
   expertLastLevelFloor: 0.45,    // a strong player must be able to finish the game
@@ -39,6 +46,21 @@ export const TARGETS = {
 
 const pct = (x) => `${(x * 100).toFixed(0)}%`;
 
+// The win rate a mid-skill player *should* see on this level: a campaign-wide
+// descent, eased at each stage opening so meeting a brand-new enemy kit isn't
+// also the hardest thing you've done. This is the single spec every
+// "too easy" / "too hard" verdict is measured against.
+export function targetWinRate(levelIndex, levelCount = LEVELS.length) {
+  const t = levelCount > 1 ? levelIndex / (levelCount - 1) : 0;
+  const base = TARGETS.averageWinRateFirst +
+    (TARGETS.averageWinRateLast - TARGETS.averageWinRateFirst) * t;
+  const lv = LEVELS[levelIndex];
+  if (!lv || lv.levelInStage === undefined) return base;
+  // Relief tapers off across the stage's first few levels.
+  const relief = TARGETS.stageOpeningRelief * Math.max(0, 1 - lv.levelInStage / 3);
+  return Math.min(0.99, base + relief);
+}
+
 // ---------------------------------------------------------------- static
 // Facts about a level you can read straight off its definition, no simulation
 // needed. Cheap, and they catch the crude mistakes (a wave table that never
@@ -47,6 +69,7 @@ export function staticProfile(levelIndex, difficultyKey = "normal") {
   const lv = LEVELS[levelIndex];
   const diff = DIFFICULTIES[difficultyKey];
   const waves = wavesFor(lv);
+  const kit = ENEMY_KITS[lv.kit].creatures;   // wave groups name roles, not creatures
   const cheapest = Math.min(...Object.values(TOWER_TYPES).map((t) => t.cost));
 
   let cumulativeReward = 0;
@@ -54,7 +77,7 @@ export function staticProfile(levelIndex, difficultyKey = "normal") {
     const hpMul = w.hpMul * lv.hpScale * diff.hpMul;
     let hp = 0, count = 0, reward = 0, spawnSeconds = 0, flyingHp = 0, armorWeighted = 0;
     for (const g of w.groups) {
-      const d = ENEMY_TYPES[g.type];
+      const d = kit[g.type];
       const groupHp = d.hp * hpMul * g.count;
       hp += groupHp;
       count += g.count;
@@ -145,9 +168,7 @@ export function checkLevel(bySkill, levelIndex, levelCount) {
 
   // --- the intended win-rate curve ---
   if (avg) {
-    const t = levelCount > 1 ? levelIndex / (levelCount - 1) : 0;
-    const target = TARGETS.averageWinRateFirst +
-      (TARGETS.averageWinRateLast - TARGETS.averageWinRateFirst) * t;
+    const target = targetWinRate(levelIndex, levelCount);
     const delta = avg.winRate - target;
     if (Math.abs(delta) > TARGETS.averageWinRateTolerance)
       add("warn", delta > 0 ? "too-easy" : "too-hard",
@@ -239,6 +260,9 @@ export function checkProgression(perLevel) {
 
   for (let i = 1; i < rows.length; i++) {
     const prev = rows[i - 1], cur = rows[i];
+    // A stage opening is *meant* to be a breather, so only hold consecutive
+    // levels inside the same stage to the monotonic rule.
+    if (LEVELS[cur.index].stageIndex !== LEVELS[prev.index].stageIndex) continue;
     if (cur.winRate > prev.winRate + TARGETS.monotonicSlack)
       findings.push({
         severity: "warn", code: "non-monotonic", levelIndex: cur.index,

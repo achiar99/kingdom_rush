@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Tower Realm — bestiary sheet</title>
+<style>
+  body { margin: 0; background: #1b1f2a; color: #e8ecf4;
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { color: #9aa4bd; font-size: 13px; margin: 0 0 16px; max-width: 760px; line-height: 1.5; }
+  canvas { display: block; border-radius: 10px; background: #2b3040; }
+</style>
+</head>
+<body>
+<h1>⚔️ Bestiary — every creature in every stage</h1>
+<p class="note">
+  Each row is one stage's kit; each column is a tactical role. Everything here is
+  composed by <code>render/monsters.js</code> from the <code>art</code> recipes in
+  <code>data/enemyKits.js</code> — no per-creature drawing code. Reload after editing a
+  recipe to see the change. Served from the dev server: <code>/tools/art-preview.html</code>
+</p>
+<!-- render/canvas.js binds to #game at import time, so it has to exist first -->
+<canvas id="game" width="1180" height="900"></canvas>
+
+<script type="module">
+  import { ENEMY_KITS, ROLES } from "../src/data/enemyKits.js";
+  import { loadLevel } from "../src/state.js";
+  import { ctx } from "../src/render/canvas.js";
+  import { drawEnemy } from "../src/render/monsters.js";
+
+  // monsters.js reads PATH/PATH_LEN for facing, so a level has to be loaded.
+  loadLevel(0);
+
+  const COL_W = 180, ROW_H = 168, PAD_X = 60, PAD_Y = 78;
+
+  function label(text, x, y, color = "#e8ecf4", size = 12, weight = 600) {
+    ctx.fillStyle = color;
+    ctx.font = `${weight} ${size}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y);
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, 1180, 900);
+
+    // column headers — the six roles
+    ROLES.forEach((role, c) => label(role.toUpperCase(), PAD_X + c * COL_W + COL_W / 2, 26, "#ffcf52", 11, 700));
+
+    Object.values(ENEMY_KITS).forEach((kit, r) => {
+      const cy = PAD_Y + r * ROW_H + 54;
+      // row header — the stage this kit belongs to
+      ctx.save();
+      ctx.translate(22, cy);
+      ctx.rotate(-Math.PI / 2);
+      label(kit.name, 0, 0, "#9aa4bd", 12, 700);
+      ctx.restore();
+
+      ROLES.forEach((role, c) => {
+        const creature = kit.creatures[role];
+        const cx = PAD_X + c * COL_W + COL_W / 2;
+        // A stand-in creep: the same shape drawEnemy gets during a battle.
+        const e = {
+          x: cx, y: cy, dist: 40, radius: creature.radius,
+          colors: creature.colors, def: creature,
+          hp: 0.72, maxHp: 1,
+          flying: creature.flying, boss: !!creature.boss,
+          engaged: false, dead: false,
+        };
+        drawEnemy(e);
+        label(creature.name, cx, cy + 62, "#e8ecf4", 12, 600);
+        label(`${creature.hp} hp · ${creature.speed} spd` +
+              (creature.armor ? ` · ${Math.round(creature.armor * 100)}% armour` : ""),
+              cx, cy + 78, "#9aa4bd", 10, 400);
+      });
+    });
+  }
+
+  // One static frame is enough to review silhouettes, but the flap/flicker
+  // animations only read in motion, so keep it ticking.
+  (function loop() { draw(); requestAnimationFrame(loop); })();
+  draw();
+</script>
+</body>
+</html>

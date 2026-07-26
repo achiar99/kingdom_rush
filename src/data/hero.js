@@ -1,23 +1,23 @@
-// The five playable heroes — one is chosen on the world map (saved per slot).
+// The five champions — one is chosen on the world map (saved per slot).
 // A hero is a single free unit you direct by clicking the battlefield; it
 // respawns after a cooldown when it dies, and levels 1→10 by fighting.
 //
-// attack: "melee" heroes chase and block ground creeps like barracks
-// soldiers. "ranged" heroes stand their ground and shoot the furthest-along
-// enemy in range — INCLUDING flyers, which no melee unit can touch — and
-// only fight hand-to-hand when a creep walks right into them.
+// attack: "melee" heroes chase and block ground creeps like phalanx hoplites.
+// "ranged" heroes stand their ground and shoot the furthest-along enemy in
+// range — INCLUDING flyers, which no melee unit can touch — and only fight
+// hand-to-hand when something walks right into them.
 //
 // Balance: everyone gets a similar power budget, spent differently —
 //              HP   DPS   speed  reach          respawn
-//   knight     220  28.6  100    melee          18s   the all-rounder
-//   juggernaut 350  31.6   70    melee          24s   walking wall, slow everywhere
-//   ranger     130  28.9  115    ranged 160     14s   fragile, kites, hits flyers
-//   dancer     150  35.7  150    melee          12s   highest dps, dies fast
-//   mage       180  33.3   85    ranged 130     20s   armor-ignoring magic bolts
+//   achilles   220  28.6  100    melee          18s   the all-rounder
+//   ajax       350  31.6   70    melee          24s   a wall with a spear, slow
+//   atalanta   130  28.9  115    ranged 160     14s   fragile, kites, hits flyers
+//   perseus    150  35.7  150    melee          12s   highest dps, dies fast
+//   circe      180  33.3   85    ranged 130     20s   armour-ignoring sorcery
 export const HEROES = {
-  knight: {
-    key: "knight", name: "Sir Aldric", icon: "🛡️",
-    tagline: "Balanced sword-and-board champion",
+  achilles: {
+    key: "achilles", name: "Achilles", icon: "⚔️",
+    tagline: "Best of the Achaeans — sword, shield, and no patience",
     attack: "melee", maxHp: 220, damage: 20, attackInterval: 0.7,
     speed: 100, meleeRange: 22, aggroRadius: 140,
     respawnTime: 18, regenDelay: 5, regenRate: 12,
@@ -25,19 +25,19 @@ export const HEROES = {
     helm: ["#ffe9a8", "#d9a222"], plume: "#c0392b", cape: "#a02c20",
     colors: { light: "#fff4c2", mid: "#e0a83a", dark: "#8a5c14" },
   },
-  juggernaut: {
-    key: "juggernaut", name: "Bruk", icon: "🔨",
-    tagline: "A slow walking wall with a crushing hammer",
+  ajax: {
+    key: "ajax", name: "Ajax the Great", icon: "🛡️",
+    tagline: "The tower-shield. Slow, immovable, unbothered",
     attack: "melee", maxHp: 350, damage: 30, attackInterval: 0.95,
     speed: 70, meleeRange: 24, aggroRadius: 130,
     respawnTime: 24, regenDelay: 5, regenRate: 14,
     weapon: "hammer", figureScale: 1.55,
-    helm: ["#c8ccd8", "#6a7080"], plume: null, cape: "#4a3220",
-    colors: { light: "#e8c9a0", mid: "#a8763a", dark: "#5e3c14" },
+    helm: ["#d8cfa8", "#7a6a40"], plume: null, cape: "#4a3220",
+    colors: { light: "#e8d8a8", mid: "#a8863a", dark: "#5e4414" },
   },
-  ranger: {
-    key: "ranger", name: "Whisper", icon: "🏹",
-    tagline: "Fragile archer — strikes from afar, hits flyers",
+  atalanta: {
+    key: "atalanta", name: "Atalanta", icon: "🏹",
+    tagline: "Raised by a bear, faster than her suitors, hits flyers",
     attack: "ranged", range: 160, projectileSpeed: 480, projColor: "#d8f08a",
     maxHp: 130, damage: 13, attackInterval: 0.45,
     speed: 115, meleeRange: 20, aggroRadius: 120,
@@ -46,30 +46,30 @@ export const HEROES = {
     helm: ["#a8d878", "#3f6b22"], plume: null, cape: null,
     colors: { light: "#d9f0b8", mid: "#7fb84a", dark: "#3f6b22" },
   },
-  dancer: {
-    key: "dancer", name: "Zephyra", icon: "🗡️",
-    tagline: "Blinding speed, a storm of dagger strikes",
+  perseus: {
+    key: "perseus", name: "Perseus", icon: "🗡️",
+    tagline: "Winged sandals and a very sharp harpe",
     attack: "melee", maxHp: 150, damage: 15, attackInterval: 0.42,
     speed: 150, meleeRange: 20, aggroRadius: 150,
     respawnTime: 12, regenDelay: 4, regenRate: 14,
     weapon: "dagger", figureScale: 1.2,
-    helm: ["#c8f0f0", "#1f6b6b"], plume: "#4ab8b8", cape: null,
-    colors: { light: "#c8f0f0", mid: "#4ab8b8", dark: "#1f6b6b" },
+    helm: ["#dff0f0", "#4a7f86"], plume: "#7fd8d8", cape: "#2f6f78",
+    colors: { light: "#d8f4f4", mid: "#5ec8c8", dark: "#256f74" },
   },
-  mage: {
-    key: "mage", name: "Magnus", icon: "🪄",
-    tagline: "Arcane bolts that pierce any armor",
-    attack: "ranged", range: 130, projectileSpeed: 420, projColor: "#d79bff", magic: true,
+  circe: {
+    key: "circe", name: "Circe", icon: "🪄",
+    tagline: "Sorceress of Aiaia — her curses do not care about bronze",
+    attack: "ranged", range: 130, projectileSpeed: 420, projColor: "#e0a8ff", magic: true,
     maxHp: 180, damage: 30, attackInterval: 0.9,
     speed: 85, meleeRange: 20, aggroRadius: 120,
     respawnTime: 20, regenDelay: 5, regenRate: 11,
     weapon: "staff", figureScale: 1.3,
-    helm: ["#c9a8f0", "#5f359c"], plume: null, cape: "#5f359c",
-    colors: { light: "#e8d0ff", mid: "#a86be0", dark: "#5f359c" },
+    helm: ["#e8c8a0", "#8a5a2c"], plume: null, cape: "#6a2f7a",
+    colors: { light: "#f0d8b0", mid: "#c08a48", dark: "#6e4a18" },
   },
 };
 
-export const DEFAULT_HERO = "knight";
+export const DEFAULT_HERO = "achilles";
 
 // Hero levelling: every battle starts at level 1 and grows to `maxLevel` by
 // fighting — XP equals damage dealt, plus the gold bounty of every creep the

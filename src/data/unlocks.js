@@ -15,19 +15,33 @@
 import { MAX_LEVEL } from "../config.js";
 import { TOWER_TYPES } from "./towerTypes.js";
 
+// The first five levels of Stage I are the tutorial arc: one new thing each.
+// Everything from level 6 of Stage I onward is the full arsenal — by then the
+// player has met every tower, both abilities, and all three upgrade tiers,
+// and the remaining forty-five levels are about using them well.
 const UNLOCKS = [
-  { // 1 · Greenwood Vale — archers first, barracks joins after wave 1; no upgrades yet
+  { // I·1 The Landing Beaches — just bowmen, and no upgrades to think about
     towers: { archer: 1, barracks: 2 },
     maxTowerLevel: 1,
-    abilities: { soldiers: 4 },
+    abilities: {},
   },
-  { // 2 · Frostpeak Pass — artillery arrives; level-2 upgrades; Ignite later on
+  { // I·2 Scamander Ford — the phalanx from the start; reinforcements appear
+    towers: { archer: 1, barracks: 1 },
+    maxTowerLevel: 2,
+    abilities: { soldiers: 3 },
+  },
+  { // I·3 The Greek Camp — the ballista arrives
     towers: { archer: 1, barracks: 1, artillery: 2 },
     maxTowerLevel: 2,
-    abilities: { soldiers: 1, fire: 4 },
+    abilities: { soldiers: 1 },
   },
-  { // 3 · Emberfall Keep — magic arrives; full upgrades; both abilities
-    towers: { archer: 1, barracks: 1, artillery: 1, magic: 2 },
+  { // I·4 Chryse Road — Ignite joins the ability bar
+    towers: { archer: 1, barracks: 1, artillery: 1 },
+    maxTowerLevel: 2,
+    abilities: { soldiers: 1, fire: 2 },
+  },
+  { // I·5 Tenedos Strait — the Oracle, and the third upgrade tier
+    towers: { archer: 1, barracks: 1, artillery: 1, magic: 1 },
     maxTowerLevel: MAX_LEVEL,
     abilities: { soldiers: 1, fire: 1 },
   },

@@ -31,6 +31,7 @@ export function resetRun() {
     hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
     summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
     spawnQueue: [], spawnTimer: 0,
+    nextWaveIn: CONFIG.firstWaveDelay,
     running: false, over: false, paused: false, speed: 1,
     hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
     heroSelected: false, placingAbility: null, hoverPos: null,
@@ -38,10 +39,22 @@ export function resetRun() {
   return { diff, heroDef };
 }
 
+// Called by the player's button, and by update() when the countdown expires.
+// The only difference between the two is how much time was left on the clock,
+// which is exactly what the early-call bonus pays for — so both go through
+// here and the bonus falls out on its own.
 export function startNextWave() {
   if (state.over || state.running) return;
   const waves = wavesFor(LEVEL);
   if (state.waveIndex + 1 >= waves.length) return;
+
+  const bonus = earlyCallBonus();
+  state.nextWaveIn = 0;
+  if (bonus > 0) {
+    state.gold += bonus;
+    simHooks.setTip("Wave called in early — +" + bonus + " gold.");
+  }
+
   state.waveIndex++;
   const wave = waves[state.waveIndex];
   const hpMul = wave.hpMul * LEVEL.hpScale * getDifficulty().hpMul;
@@ -58,16 +71,24 @@ export function startNextWave() {
   simHooks.updateButtons();
 }
 
+// What calling the next wave in right now would pay. Zero once the countdown
+// has run out, so an auto-started wave never awards anything.
+export function earlyCallBonus() {
+  if (state.running || state.over) return 0;
+  return Math.max(0, Math.floor(state.nextWaveIn) * CONFIG.earlyCallGold);
+}
+
 export function waveCleared() {
   state.running = false;
   if (state.waveIndex + 1 >= wavesFor(LEVEL).length) {
     endGame(true);
   } else {
     state.gold += CONFIG.waveClearBonus;
+    state.nextWaveIn = CONFIG.nextWaveDelay;
     const fresh = newUnlocksAt(LEVEL.index, state.waveIndex + 2);
     simHooks.setTip("Wave cleared! +" + CONFIG.waveClearBonus + " gold." +
       (fresh.length ? " 🔓 Unlocked: " + fresh.join(", ") + "!" : "") +
-      " Build up, then start the next wave.");
+      " Build up — the next wave comes on its own, or send it early for gold.");
   }
   simHooks.updateHud();
   simHooks.updateButtons();
@@ -97,6 +118,18 @@ export function endGame(won) {
 
 export function update(dt) {
   if (state.over) return;
+
+  // Between waves the clock runs down on its own; at zero the next wave
+  // launches with no bonus paid. startNextWave() is the single entry point,
+  // so a wave that arrives this way behaves identically to one the player
+  // called in — it just doesn't pay.
+  if (!state.running && state.nextWaveIn > 0) {
+    state.nextWaveIn -= dt;
+    if (state.nextWaveIn <= 0) {
+      state.nextWaveIn = 0;
+      startNextWave();
+    }
+  }
 
   // spawn creeps for the running wave
   if (state.running && state.spawnQueue.length) {
@@ -158,7 +191,7 @@ export function update(dt) {
         x: t.x, y: t.y - 7, target, damage: t.damage,
         speed: t.projectileSpeed, color: t.def.projColor,
         attack: t.def.attack, splashRadius: t.splashRadius || 0,
-        magic: t.def.key === "magic", dead: false,
+        magic: t.def.key === "magic", hitsAir: !!t.def.hitsAir, dead: false,
       });
       t.cooldown = 1 / t.fireRate;
     }
@@ -196,8 +229,14 @@ export function update(dt) {
 function onProjectileHit(p) {
   if (p.attack === "splash") {
     const ix = p.target.x, iy = p.target.y;
-    for (const e of state.enemies)
-      if (!e.dead && dist(ix, iy, e.x, e.y) <= p.splashRadius) damageEnemy(e, p.damage, p.magic);
+    for (const e of state.enemies) {
+      if (e.dead || dist(ix, iy, e.x, e.y) > p.splashRadius) continue;
+      // A blast on the ground doesn't reach anything airborne — otherwise the
+      // Ballista would still be answering flyers through its splash, which is
+      // exactly the weakness it's supposed to have.
+      if (e.flying && !p.hitsAir) continue;
+      damageEnemy(e, p.damage, p.magic);
+    }
     state.effects.push({ x: ix, y: iy, maxR: p.splashRadius, life: 0.35, maxLife: 0.35, color: "#ffb057" });
   } else {
     damageEnemy(p.target, p.damage, p.magic);
@@ -256,11 +295,13 @@ function updateSummonedSoldiers(dt) {
   state.summonedSoldiers = state.summonedSoldiers.filter((s) => s.life > 0);
 }
 
-// target the enemy furthest along the path that's within range
+// Target the enemy furthest along the path that's within range — skipping
+// flyers entirely for towers that can't shoot upward (the Ballista).
 export function acquireTarget(tower) {
   let best = null, bestDist = -1;
   for (const e of state.enemies) {
     if (e.dead) continue;
+    if (e.flying && !tower.def.hitsAir) continue;
     if (dist(tower.x, tower.y, e.x, e.y) <= tower.range && e.dist > bestDist) {
       best = e; bestDist = e.dist;
     }
@@ -423,7 +464,7 @@ function updateHero(dt) {
           damage: HERO_LEVELING.damageAt(def, hero.level),
           speed: def.projectileSpeed, color: def.projColor,
           attack: "single", splashRadius: 0, magic: !!def.magic,
-          fromHero: true, dead: false,
+          hitsAir: true, fromHero: true, dead: false,
         });
         hero.shootCd = def.attackInterval;
       }

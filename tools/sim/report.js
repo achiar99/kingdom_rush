@@ -1,7 +1,7 @@
 // Console formatting for the balance report. Nothing here computes anything —
 // it only decides what's worth showing.
 import { LEVELS } from "../../src/data/levels.js";
-import { TARGETS, grade, pct } from "./analyze.js";
+import { TARGETS, grade, pct, targetWinRate } from "./analyze.js";
 
 const C = {
   reset: "\x1b[0m", dim: "\x1b[2m", bold: "\x1b[1m",
@@ -52,9 +52,7 @@ export function campaignTable(perLevel, skills) {
 
   for (const row of perLevel) {
     const lv = LEVELS[row.levelIndex];
-    const t = LEVELS.length > 1 ? row.levelIndex / (LEVELS.length - 1) : 0;
-    const target = TARGETS.averageWinRateFirst +
-      (TARGETS.averageWinRateLast - TARGETS.averageWinRateFirst) * t;
+    const target = targetWinRate(row.levelIndex);
     const g = grade(row.findings);
     const cells = skills.map((s) => {
       const sum = row.bySkill[s];

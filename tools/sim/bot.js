@@ -9,7 +9,7 @@
 // how much gold it lets sit idle). Sampling those knobs is what turns a
 // deterministic simulation into a distribution of outcomes.
 import { TOWER_TYPES, TYPE_LIST } from "../../src/data/towerTypes.js";
-import { ENEMY_TYPES } from "../../src/data/enemyTypes.js";
+import { ENEMY_KITS } from "../../src/data/enemyKits.js";
 import { wavesFor } from "../../src/data/levels.js";
 import { maxTowerLevelFor } from "../../src/data/unlocks.js";
 import { FIRE } from "../../src/data/abilities.js";
@@ -82,9 +82,10 @@ function coverage(samples, x, y, range) {
 // reasoning about the creeps it's really going to face.
 export function waveThreat(wave) {
   const hpMul = wave.hpMul * LEVEL.hpScale * getDifficulty().hpMul;
+  const kit = ENEMY_KITS[LEVEL.kit].creatures;   // wave groups name roles, not creatures
   let totalHp = 0, flyingHp = 0, armorWeighted = 0, count = 0, groundCount = 0, spawnSeconds = 0;
   for (const g of wave.groups) {
-    const d = ENEMY_TYPES[g.type];
+    const d = kit[g.type];
     const hp = d.hp * hpMul * g.count;
     totalHp += hp;
     count += g.count;
@@ -124,7 +125,8 @@ function armyDps(threat) {
     if (t.def.attack === "none") { barracks++; continue; }
     const armorPass = t.type === "magic" ? 1 : 1 - threat.avgArmor;
     const hits = t.def.attack === "splash" ? Math.min(3.2, 1 + threat.density * 0.55) : 1;
-    attack += t.damage * t.fireRate * hits * armorPass;
+    const airPass = t.def.hitsAir ? 1 : 1 - threat.flyingShare;
+    attack += t.damage * t.fireRate * hits * armorPass * airPass;
   }
   return { attack, barracks };
 }
@@ -154,8 +156,9 @@ function marginalValuePerGold(key, threat, army) {
   } else if (key === "magic") {
     dps = d.damage * d.fireRate; // ignores armor entirely
   } else if (key === "artillery") {
+    // Ground only: a wave that's half flyers is a wave the Ballista sits out.
     const hits = Math.min(3.2, 1 + threat.density * 0.55);
-    dps = d.damage * d.fireRate * hits * armorPass;
+    dps = d.damage * d.fireRate * hits * armorPass * (1 - threat.flyingShare);
   } else {
     dps = d.damage * d.fireRate * armorPass;
   }
@@ -296,16 +299,20 @@ export class Bot {
     return best;
   }
 
+  // Waves launch themselves when the countdown expires, so the only decision
+  // left is whether to send one in early — which pays the unused seconds as
+  // gold. A player who has finished shopping should always call it in; a
+  // slower one dithers and lets the clock run out for nothing.
   considerStartingWave() {
     if (state.waveIndex + 1 >= wavesFor(LEVEL).length) return;
     const threat = this.currentThreat();
     const army = armyDps(threat);
     const canStillBuy = !!(this.bestBuild(threat, army) || this.bestUpgrade(threat, army));
-    // Go when the shopping's done, or when patience runs out either way.
-    if (!canStillBuy || this.prepElapsed >= this.prepPatience) {
-      this.prepPatience = this.rng.float(...this.p.prepPatience);
-      startNextWave();
-    }
+    if (canStillBuy && this.prepElapsed < this.prepPatience) return;
+    // Weaker players don't reliably notice the bonus and let it tick away.
+    if (canStillBuy && !this.rng.chance(this.p.abilityUse)) return;
+    this.prepPatience = this.rng.float(...this.p.prepPatience);
+    startNextWave();
   }
 
   // ------------------------------------------------------------ abilities

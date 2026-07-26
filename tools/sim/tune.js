@@ -29,7 +29,7 @@ function parseArgs(argv) {
   const o = {
     levelIndex: null, param: "hpScale", range: null, solve: false,
     trials: 120, skills: ["novice", "average", "expert"],
-    difficulty: "normal", hero: "knight", upgrades: {}, dt: DEFAULT_DT, seed0: 1,
+    difficulty: "normal", hero: "achilles", upgrades: {}, dt: DEFAULT_DT, seed0: 1,
     target: null,
     jobs: Math.max(1, Math.min(os.cpus().length - 1, 12)),
   };

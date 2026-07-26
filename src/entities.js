@@ -1,12 +1,11 @@
 // Factories + stat math for enemies, towers, barracks soldiers and the hero.
 import { SELL_REFUND } from "./config.js";
-import { ENEMY_TYPES } from "./data/enemyTypes.js";
 import { TOWER_TYPES } from "./data/towerTypes.js";
 import { HERO_LEVELING } from "./data/hero.js";
 import { SUMMON } from "./data/abilities.js";
 import { towerDamageMul, splashRadiusMul, soldierHpMul, soldierDamageMul, summonHpMul } from "./data/store.js";
 import { nearestPointOnPath } from "./geometry.js";
-import { state, PATH } from "./state.js";
+import { state, PATH, KIT } from "./state.js";
 
 export function damageEnemy(e, dmg, isMagic) {
   if (e.dead) return;
@@ -15,9 +14,11 @@ export function damageEnemy(e, dmg, isMagic) {
   if (e.hp <= 0) { e.dead = true; state.gold += e.reward; }
 }
 
-// entry: { type, hpMul, speedMul } — a single queued spawn.
+// entry: { type, hpMul, speedMul } — a single queued spawn. `type` is a ROLE
+// ("swift", "brute", …); the active stage's kit decides which creature shows
+// up to play it.
 export function makeEnemy(entry) {
-  const d = ENEMY_TYPES[entry.type];
+  const d = KIT[entry.type];
   const hp = d.hp * entry.hpMul;
   return {
     type: entry.type, def: d, dist: 0,
