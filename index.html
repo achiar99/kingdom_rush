@@ -188,12 +188,14 @@
     background: rgba(16,20,28,.7); padding: 3px 9px; border-radius: 7px; white-space: nowrap;
   }
   .map-node .diff { font-size: 11px; color: var(--muted); }
-  .map-node.locked { cursor: default; }
+  .map-node.locked { cursor: default; opacity: 0.7; }
   .map-node.locked .disc {
-    background: radial-gradient(circle at 35% 30%, #6b7280, #3b414d 60%, #262b34);
-    border-color: #545b68; color: #aab2c4;
+    width: 42px; height: 42px; font-size: 16px;
+    background: radial-gradient(circle at 35% 30%, #58606e, #343a46 60%, #232833);
+    border: 2px solid #4a515e; color: #aab2c4; box-shadow: 0 3px 9px rgba(0,0,0,.3);
   }
-  .map-node.locked .label { color: var(--muted); }
+  .map-node.locked .label { color: var(--muted); background: rgba(16,20,28,.45); }
+  .map-node.locked .diff { display: none; }
   .map-node.done .disc { border-color: #5ad1a5; }
   .map-node:not(.locked):hover .disc { transform: scale(1.08); transition: transform .1s; }
   .map-node .node-stars { color: var(--gold); font-size: 12px; letter-spacing: 2px; }
@@ -201,39 +203,96 @@
   #saveControls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
   #saveTip { color: var(--muted); font-size: 12px; min-height: 16px; }
 
-  /* star upgrade store */
+  /* star upgrade store — Kingdom-Rush-style wooden upgrade board */
   #storeModal {
     position: fixed; inset: 0; z-index: 20;
-    background: rgba(10, 12, 18, 0.65);
+    background: rgba(10, 12, 18, 0.7);
     display: flex; align-items: center; justify-content: center; padding: 16px;
   }
   #storeModal[hidden] { display: none; }
   #storePanel {
-    background: var(--panel); border-radius: 14px; padding: 18px 20px;
-    width: min(680px, 100%); max-height: 90vh; overflow-y: auto;
-    box-shadow: 0 14px 50px rgba(0,0,0,.55);
-    display: flex; flex-direction: column; gap: 10px;
+    background:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.14) 0 2px, transparent 2px 52px),
+      repeating-linear-gradient(90deg, rgba(255,255,255,0.025) 0 3px, transparent 3px 11px),
+      linear-gradient(170deg, #4a3826, #2a1e12);
+    border: 3px solid #767c89; outline: 2px solid #1d2027;
+    border-radius: 16px;
+    box-shadow: 0 18px 60px rgba(0,0,0,.65), inset 0 0 0 2px rgba(0,0,0,.45);
+    width: min(720px, 100%); max-height: 92vh; overflow-y: auto;
+    padding: 12px 18px 16px;
   }
-  #storeHead { display: flex; justify-content: space-between; align-items: baseline; font-size: 17px; }
-  #storeStars { color: var(--gold); font-size: 14px; font-variant-numeric: tabular-nums; }
-  #storeTracks { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  @media (max-width: 560px) { #storeTracks { grid-template-columns: 1fr; } }
-  .store-track {
-    background: rgba(16, 20, 28, 0.55); border-radius: 10px; padding: 10px 12px;
-    display: flex; flex-direction: column; gap: 6px;
+  #storeTitle {
+    text-align: center; font-size: 26px; font-weight: 800;
+    text-transform: uppercase; letter-spacing: 6px;
+    color: #ffe9a8; text-shadow: 0 2px 0 rgba(0,0,0,.8), 0 0 16px rgba(255,207,82,.3);
+    margin-bottom: 10px;
   }
-  .store-track .row1 { display: flex; align-items: center; gap: 8px; font-weight: 600; }
-  .store-track .ranks { margin-left: auto; color: var(--gold); letter-spacing: 2px; font-size: 13px; }
-  .store-track .per { color: var(--muted); font-size: 12px; }
-  .store-track button {
-    align-self: flex-start;
-    background: linear-gradient(160deg, #4a3a12, #241b08);
-    border: 1.5px solid #e0a83a; color: var(--ink);
-    border-radius: 8px; padding: 5px 12px; font-size: 13px; cursor: pointer;
+  #storeTracks { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .track { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+  .track .slot {
+    position: relative; display: flex; flex-direction: column; align-items: center;
+    gap: 16px; padding: 13px 9px;
+    background: linear-gradient(180deg, #221810, #150e07);
+    border-radius: 40px;
+    box-shadow: inset 0 3px 10px rgba(0,0,0,.85), 0 1px 0 rgba(255,255,255,.07);
   }
-  .store-track button:hover:not(:disabled) { border-color: var(--gold); }
-  .store-track button:disabled { opacity: 0.45; cursor: default; }
-  #storeFoot { display: flex; justify-content: space-between; margin-top: 4px; }
+  .track .rail {
+    position: absolute; top: 24px; bottom: 24px; width: 4px;
+    background: #4b3a24; border-radius: 2px;
+  }
+  .rank {
+    position: relative; z-index: 1;
+    width: 52px; height: 52px; border-radius: 50%; padding: 0;
+    display: grid; place-items: center; font-size: 22px;
+    border: 3px solid #e0a83a; cursor: default;
+    box-shadow: 0 3px 8px rgba(0,0,0,.5);
+  }
+  .rank.bought {
+    background: radial-gradient(circle at 35% 30%, var(--tc-light), var(--tc-dark) 75%);
+    box-shadow: 0 0 12px rgba(255,207,82,.3), 0 3px 8px rgba(0,0,0,.5);
+  }
+  .rank.next { background: radial-gradient(circle at 35% 30%, #6b5a2c, #372c12 75%); cursor: pointer; }
+  .rank.next.affordable { border-color: #ffcf52; animation: rankPulse 1.1s ease-in-out infinite; }
+  .rank.next:hover { filter: brightness(1.2); }
+  @keyframes rankPulse {
+    0%, 100% { box-shadow: 0 0 4px rgba(255,207,82,.35), 0 3px 8px rgba(0,0,0,.5); }
+    50%      { box-shadow: 0 0 16px rgba(255,207,82,.75), 0 3px 8px rgba(0,0,0,.5); }
+  }
+  .rank.locked { filter: grayscale(1) brightness(.5); border-color: #5a5346; }
+  .rank .cost {
+    position: absolute; bottom: -9px; left: 50%; transform: translateX(-50%);
+    background: #10141c; border: 1.5px solid #e0a83a; border-radius: 8px;
+    font-size: 11px; font-weight: 700; padding: 0 6px; color: var(--gold);
+    white-space: nowrap;
+  }
+  .track-icon {
+    width: 52px; height: 52px; display: grid; place-items: center; font-size: 25px;
+    background: linear-gradient(160deg, #2c313b, #13161c);
+    border: 3px solid #7b828f; border-radius: 10px;
+    box-shadow: inset 0 2px 7px rgba(0,0,0,.75), 0 2px 6px rgba(0,0,0,.4);
+  }
+  #storeFoot { display: flex; align-items: center; gap: 12px; margin-top: 16px; }
+  #storeStars {
+    font-size: 19px; font-weight: 800; color: var(--gold); letter-spacing: 1px;
+    background: rgba(0,0,0,.4); padding: 6px 16px; border-radius: 10px;
+    border: 2px solid #767c89; font-variant-numeric: tabular-nums;
+  }
+  #storeFoot button {
+    text-transform: uppercase; letter-spacing: 2px; font-weight: 800; font-size: 14px;
+    color: #dfe4ee; padding: 9px 24px; border-radius: 10px; cursor: pointer;
+    background: linear-gradient(180deg, #3c414c, #1e222a);
+    border: 2px solid #7b828f; box-shadow: 0 3px 8px rgba(0,0,0,.45);
+  }
+  #storeFoot button:hover { filter: brightness(1.15); }
+  #storeClose { margin-left: auto; color: #ffe9a8; }
+  #storeTip {
+    position: fixed; z-index: 30; max-width: 250px; pointer-events: none;
+    background: rgba(23, 16, 9, 0.96); border: 2px solid #e0a83a; border-radius: 10px;
+    padding: 8px 11px; font-size: 12.5px; line-height: 1.45; color: #ffe9c9;
+    box-shadow: 0 8px 24px rgba(0,0,0,.55);
+  }
+  #storeTip b { color: #ffcf52; }
+  #storeTip[hidden] { display: none; }
 
   /* save-slot picker */
   #slotList {
@@ -283,17 +342,15 @@
     <!-- star upgrade store (modal over the map) -->
     <div id="storeModal" hidden>
       <div id="storePanel">
-        <div id="storeHead">
-          <b>⭐ Upgrade Store</b>
-          <span id="storeStars"></span>
-        </div>
-        <div class="sub">Spend stars earned from victories on permanent upgrades for this save slot.</div>
+        <div id="storeTitle">Upgrades</div>
         <div id="storeTracks"></div>
         <div id="storeFoot">
-          <button id="storeReset" class="secondary">↺ Refund all stars</button>
-          <button id="storeClose">Close</button>
+          <span id="storeStars"></span>
+          <button id="storeReset">Reset</button>
+          <button id="storeClose">Done</button>
         </div>
       </div>
+      <div id="storeTip" hidden></div>
     </div>
   </div>
 

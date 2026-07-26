@@ -33,36 +33,46 @@ function positionMenu(menuEl, x, y) {
 
 export function closeMenus() { closeBuildMenu(); closeManageMenu(); }
 
-// Rebuild an open build menu in place — used when a wave clears while the
-// player is browsing one, so newly unlocked towers appear without reopening.
-export function refreshBuildMenu() {
-  if (state.menuSpot && buildMenu.classList.contains("show")) openBuildMenu(state.menuSpot);
-}
-
 // --- build menu (empty spot) ---
+// The menu is built once on open, then kept live by syncBuildMenu (called
+// every frame from updateHud): affordability tracks gold as it changes, and
+// lock labels flip in place the moment a wave unlock lands. Click handlers
+// are attached unconditionally — buildTower re-validates lock + gold.
 function openBuildMenu(spot) {
   closeManageMenu();
   state.menuSpot = spot;
   buildMenu.innerHTML = "";
   for (const key of TYPE_LIST) {
     const def = TOWER_TYPES[key];
-    const unlockAt = towerUnlockWave(LEVEL.index, key);
-    const locked = unlockAt === null || currentWave(state) < unlockAt;
     const btn = document.createElement("button");
     btn.className = "tower-opt";
-    btn.disabled = locked || state.gold < def.cost;
+    btn.dataset.key = key;
+    btn.innerHTML = `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span><span class="ct"></span>`;
+    btn.addEventListener("click", (ev) => { ev.stopPropagation(); buildTower(spot, key); });
+    buildMenu.appendChild(btn);
+  }
+  syncBuildMenu(true);
+  positionMenu(buildMenu, spot.x, spot.y);
+  buildMenu.classList.add("show");
+}
+
+function syncBuildMenu(force = false) {
+  if (!force && (!state.menuSpot || !buildMenu.classList.contains("show"))) return;
+  for (const btn of buildMenu.querySelectorAll(".tower-opt")) {
+    const def = TOWER_TYPES[btn.dataset.key];
+    const unlockAt = towerUnlockWave(LEVEL.index, btn.dataset.key);
+    const locked = unlockAt === null || currentWave(state) < unlockAt;
+    btn.disabled = locked || state.gold < def.cost;      // cheap, safe to set every frame
+    const lockState = locked ? (unlockAt === null ? "realm" : "w" + unlockAt) : "open";
+    if (btn.dataset.lockState === lockState) continue;   // label/tooltip already right
+    btn.dataset.lockState = lockState;
     btn.title = locked
       ? def.name + (unlockAt === null ? " — unlocks in a later realm" : " — unlocks at wave " + unlockAt)
       : def.name + " — " + def.cost + " gold";
-    btn.innerHTML =
-      `<span class="ic">${def.icon}</span><span class="nm">${def.name}</span>` +
-      (locked ? `<span class="ct">🔒${unlockAt === null ? "" : " w" + unlockAt}</span>`
-              : `<span class="ct">💰${def.cost}</span>`);
-    if (!locked) btn.addEventListener("click", (ev) => { ev.stopPropagation(); buildTower(spot, key); });
-    buildMenu.appendChild(btn);
+    btn.querySelector(".ct").innerHTML = locked
+      ? `🔒${unlockAt === null ? "" : " w" + unlockAt}`
+      : `💰${def.cost}`;
   }
-  positionMenu(buildMenu, spot.x, spot.y);
-  buildMenu.classList.add("show");
 }
 
 function closeBuildMenu() {
@@ -278,6 +288,7 @@ export function updateHud() {
   syncAbilityButton("abilitySoldiers", "abilitySoldiersCd", state.abilityCooldowns.soldiers, "soldiers");
   syncAbilityButton("abilityFire", "abilityFireCd", state.abilityCooldowns.fire, "fire");
 
+  syncBuildMenu();
   refreshManageMenu();
 }
 

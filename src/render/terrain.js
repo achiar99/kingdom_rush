@@ -2,7 +2,8 @@
 // at the path's exit.
 import { CONFIG } from "../config.js";
 import { TOWER_TYPES } from "../data/towerTypes.js";
-import { state, PATH, BUILD_SPOTS, THEME, spotOccupied } from "../state.js";
+import { pointAtDistance } from "../geometry.js";
+import { state, PATH, PATH_LEN, BUILD_SPOTS, THEME, spotOccupied } from "../state.js";
 import { ctx, groundShadow, shadedSphere } from "./canvas.js";
 
 export function drawGround() {
@@ -40,10 +41,53 @@ export function drawPath() {
   ctx.translate(0, 3);
   strokePath(46, "rgba(0,0,0,0.25)");
   ctx.restore();
+  strokePath(48, "rgba(0,0,0,0.10)");   // soft blend into the grass
   strokePath(44, THEME.path.rim);
   strokePath(38, THEME.path.body);
   strokePath(26, THEME.path.track);
-  strokePath(6, "rgba(255,240,200,0.12)");
+  drawPathTexture();
+  // worn dashed footpath line down the middle
+  ctx.setLineDash([8, 14]);
+  strokePath(4, "rgba(255,240,200,0.16)");
+  ctx.setLineDash([]);
+}
+
+// Texture sampled along the road: faint worn bands across the track, and
+// small pebbles scattered on alternating edges. Everything is deterministic
+// (position-derived), so the road doesn't shimmer between frames.
+function drawPathTexture() {
+  for (let d = 24, i = 0; d < PATH_LEN - 12; d += 38, i++) {
+    const p = pointAtDistance(PATH, PATH_LEN, d);
+    const q = pointAtDistance(PATH, PATH_LEN, d + 2);
+    const ang = Math.atan2(q.y - p.y, q.x - p.x);
+    const h = Math.sin(i * 127.1) * 43758.5453;
+    const f = h - Math.floor(h);          // stable pseudo-random 0..1 per band
+
+    // worn band across the track
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(ang);
+    ctx.fillStyle = "rgba(0,0,0,0.07)";
+    ctx.beginPath();
+    ctx.roundRect(-1.5, -11, 3, 22, 1.5);
+    ctx.fill();
+    ctx.restore();
+
+    // pebble hugging one edge of the road body
+    const side = i % 2 ? 1 : -1;
+    const off = 14 + f * 4;
+    const px = p.x + Math.cos(ang + Math.PI / 2) * side * off;
+    const py = p.y + Math.sin(ang + Math.PI / 2) * side * off;
+    const pr = 1.7 + f * 1.4;
+    ctx.fillStyle = "rgba(30,18,8,0.28)";
+    ctx.beginPath();
+    ctx.arc(px, py, pr, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "rgba(255,245,220,0.22)";
+    ctx.beginPath();
+    ctx.arc(px - pr * 0.3, py - pr * 0.3, pr * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
 export function drawBuildSpots() {

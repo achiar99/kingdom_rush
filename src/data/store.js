@@ -13,12 +13,18 @@ export const RANK_COSTS = [1, 2, 3]; // stars for rank 1, 2, 3 — 6 to max a tr
 // The first four keys deliberately match TOWER_TYPES keys, so tower stat code
 // can look ranks up by tower type directly.
 export const TRACKS = [
-  { key: "archer",    icon: "🏹", name: "Archer Doctrine",   per: "+12% Archer damage" },
-  { key: "artillery", icon: "💣", name: "Bigger Bombs",      per: "+12% damage · +8% blast radius" },
-  { key: "magic",     icon: "🔮", name: "Arcane Focus",      per: "+12% Magic damage" },
-  { key: "barracks",  icon: "⚔️", name: "Veteran Training",  per: "+15% soldier HP · +12% soldier damage" },
-  { key: "summon",    icon: "🪖", name: "Reserve Battalion", per: "+1 reinforcement · +20% their HP" },
-  { key: "fire",      icon: "🔥", name: "Hotter Flames",     per: "+25% burn damage · +0.5s burn" },
+  { key: "archer",    icon: "🏹", name: "Archer Doctrine",   per: "+12% Archer damage",
+    colors: ["#a8d878", "#3f6b22"] },
+  { key: "artillery", icon: "💣", name: "Bigger Bombs",      per: "+12% damage · +8% blast radius",
+    colors: ["#f6c07a", "#8a4d12"] },
+  { key: "magic",     icon: "🔮", name: "Arcane Focus",      per: "+12% Magic damage",
+    colors: ["#d9a8ff", "#5f359c"] },
+  { key: "barracks",  icon: "⚔️", name: "Veteran Training",  per: "+15% soldier HP · +12% soldier damage",
+    colors: ["#bcd0ff", "#2f4788"] },
+  { key: "summon",    icon: "🪖", name: "Reserve Battalion", per: "+1 reinforcement · +20% their HP",
+    colors: ["#9ff0c8", "#2c7a5c"] },
+  { key: "fire",      icon: "🔥", name: "Hotter Flames",     per: "+25% burn damage · +0.5s burn",
+    colors: ["#ffb073", "#a02c10"] },
 ];
 
 export const rankOf = (key) => (progress.upgrades && progress.upgrades[key]) || 0;

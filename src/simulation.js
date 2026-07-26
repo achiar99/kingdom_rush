@@ -14,7 +14,7 @@ import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy } from "./entities.js";
 import { getDifficulty } from "./save.js";
-import { closeMenus, refreshBuildMenu, updateHud, updateButtons, setTip, endGame } from "./ui.js";
+import { closeMenus, updateHud, updateButtons, setTip, endGame } from "./ui.js";
 
 export function startNextWave() {
   if (state.over || state.running) return;
@@ -46,7 +46,6 @@ export function waveCleared() {
     setTip("Wave cleared! +" + CONFIG.waveClearBonus + " gold." +
       (fresh.length ? " 🔓 Unlocked: " + fresh.join(", ") + "!" : "") +
       " Build up, then start the next wave.");
-    refreshBuildMenu();
   }
   updateHud();
   updateButtons();
