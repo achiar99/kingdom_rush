@@ -39,11 +39,16 @@ const kit = (id, name, flavour, creatures) => ({ id, name, flavour, creatures })
 // Baseline stats per role. Kits tweak these — a Nemean Lion is not a war
 // elephant — but they stay recognisably the same tactical piece, so a player
 // who learned to counter "brute" in Arcadia still knows what to do in Hades.
+// `melee` is what a creep does to whatever is blocking it. Left unset it uses
+// CONFIG.enemy's default (14 every 1.0s) — which is right for rank and file,
+// and was badly wrong for anything with "boss" on it: a champion used to hit a
+// hoplite exactly as hard as a Rabble Levy did.
 const BASE = {
   swarm:     { radius: 12, hp: 45,   speed: 55,  reward: 12, armor: 0,    flying: false },
   swift:     { radius: 9,  hp: 26,   speed: 108, reward: 10, armor: 0,    flying: false },
   shielded:  { radius: 12, hp: 70,   speed: 48,  reward: 18, armor: 0.55, flying: false },
-  brute:     { radius: 18, hp: 190,  speed: 34,  reward: 28, armor: 0.2,  flying: false },
+  brute:     { radius: 18, hp: 190,  speed: 34,  reward: 28, armor: 0.2,  flying: false,
+               melee: { damage: 26 } },
   winged:    { radius: 11, hp: 52,   speed: 74,  reward: 16, armor: 0,    flying: true  },
   // Mirror image of `shielded`: steel goes straight through it, sorcery does
   // not. Without this the Oracle had no bad matchup and outclassed everything.
@@ -57,7 +62,8 @@ const BASE = {
   // Claws its health back unless something is burning it — rewards Ignite and
   // the Shrine of Hekate, punishes slow chip damage.
   revenant:  { radius: 13, hp: 120,  speed: 42,  reward: 22, armor: 0.15, flying: false, regen: 14 },
-  champion:  { radius: 26, hp: 1100, speed: 26,  reward: 160, armor: 0.35, flying: false, boss: true },
+  champion:  { radius: 26, hp: 1100, speed: 26,  reward: 160, armor: 0.35, flying: false, boss: true,
+               melee: { damage: 38, interval: 0.85 } },
 };
 
 const creature = (role, name, colors, art, tweaks = {}) => ({
@@ -254,13 +260,19 @@ const master = (name, colors, art, tweaks = {}) => ({
   art: { frame: "biped", crest: "crown", carry: "none", aura: "none", scale: 1.35, ...art },
   radius: 34, hp: 4200, speed: 22, reward: 500,
   armor: 0.4, magicResist: 0.2, flying: false, boss: true,
+  // A master walks THROUGH a phalanx. It swings hard, swings fast, and every
+  // swing cleaves the whole squad rather than one man at a time — three
+  // hoplites should buy you a couple of seconds, not stop it dead.
+  melee: { damage: 78, interval: 0.6, cleave: 46 },
   ...tweaks,
 });
 
 export const MASTERS = {
   troy: master("Hector, Breaker of Ships",
-    { light: "#ffd9a0", mid: "#b8452e", dark: "#5a1408" },
-    { frame: "biped", crest: "plume", carry: "spearShield" }),
+    // blackened bronze and deep ox-blood, so he doesn't read as a recoloured
+    // Champion of Ilion standing next to him in the guide
+    { light: "#c9a24a", mid: "#6e4a1c", dark: "#2a1c08" },
+    { frame: "biped", crest: "plume", carry: "spearShield", aura: "flame" }),
   arcadia: master("Lykaon, the Wolf-King",
     { light: "#d8cbb0", mid: "#8a7a58", dark: "#443a26" },
     { frame: "quadruped", crest: "crown", aura: "regen" }),

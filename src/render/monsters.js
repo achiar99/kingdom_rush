@@ -520,6 +520,25 @@ export function drawEnemy(e) {
   if (e.flying) groundShadow(e.x + 3, e.y + 3, r * 1.0, r * 0.45);
   else groundShadow(e.x + 2, e.y + r * 0.75, r * 1.3, r * 0.5);
 
+  // Stage masters get a standing ring of gold light regardless of what their
+  // aura slot is doing. It's a marker rather than an effect: the one thing
+  // every master has in common is that it is a master.
+  if (e.def.role === "master") {
+    const t = performance.now() / 500;
+    const ring = ctx.createRadialGradient(e.x, cy + r * 0.5, r * 0.3, e.x, cy + r * 0.5, r * 1.9);
+    ring.addColorStop(0, "rgba(255,206,90,0.30)");
+    ring.addColorStop(1, "rgba(255,170,40,0)");
+    ctx.fillStyle = ring;
+    ctx.beginPath();
+    ctx.ellipse(e.x, cy + r * 0.5, r * 1.9, r * 0.9, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = `rgba(255,214,110,${0.45 + 0.25 * Math.sin(t)})`;
+    ctx.lineWidth = Math.max(1.5, r * 0.07);
+    ctx.beginPath();
+    ctx.ellipse(e.x, cy + r * 0.62, r * 1.45, r * 0.6, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   if (art.aura && AURAS[art.aura]) AURAS[art.aura](e.x, cy, r);
   if (e.flying) drawWings(e.x, cy, r, e.colors);
 

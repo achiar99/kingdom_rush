@@ -6,6 +6,7 @@
 // harness in tools/sim, which runs whole levels thousands of times.
 import { CONFIG } from "./config.js";
 import { wavesFor } from "./data/levels.js";
+import { MASTERS } from "./data/enemyKits.js";
 import { newUnlocksAt } from "./data/unlocks.js";
 import { HERO_LEVELING, HEROES, DEFAULT_HERO } from "./data/hero.js";
 import { FIRE, SUMMON } from "./data/abilities.js";
@@ -69,6 +70,8 @@ export function startNextWave() {
       state.spawnQueue.push({ type: g.type, gap: g.gap, hpMul, speedMul: wave.speedMul });
   state.spawnTimer = 0;
   state.running = true;
+  // The one wave in each stage that gets its own billing.
+  if (wave.master) simHooks.setTip("⚔ " + MASTERS[LEVEL.kit].name + " takes the field.");
   simHooks.closeMenus();
   simHooks.updateHud();
   simHooks.updateButtons();
@@ -193,6 +196,15 @@ export function update(dt) {
     e.x = p.x; e.y = p.y;
     if (e.dist >= PATH_LEN) {
       e.dead = true;
+      // A stage master reaching the temple ends the run outright, however many
+      // lives are left. Everything else in the game is attrition you can absorb;
+      // this one is a fight you either win or lose, and letting it be survivable
+      // would make the climax of a stage just another leak.
+      if (e.def.role === "master") {
+        simHooks.setTip("💀 " + e.def.name + " reached the temple.");
+        endGame(false);
+        return;
+      }
       state.lives--;
       if (state.lives <= 0) { endGame(false); return; }
     }
@@ -296,6 +308,33 @@ function nearestOthers(x, y, n, exclude, hitsAir) {
   return pool.slice(0, n).map((o) => o.e);
 }
 
+// One swing from a creep at whatever is blocking it.
+//
+// Most creeps hit only the unit that engaged them. A master cleaves: every
+// blocker standing around it takes the same blow. That is the difference
+// between a phalanx *delaying* a boss and a phalanx *stopping* one — three
+// hoplites taking it in turn could hold a master indefinitely, which made the
+// stage finale a stalemate instead of a fight.
+function enemyStrike(e, primary) {
+  const land = (u) => {
+    if (!u || u.hp <= 0) return;
+    u.hp -= e.meleeDamage;
+    u.sinceHit = 0;                 // knocks back the out-of-combat regen clock
+  };
+  land(primary);
+  if (!e.cleave) return;
+
+  const near = (u) => u && u.hp > 0 && dist(u.x, u.y, e.x, e.y) <= e.cleave;
+  for (const t of state.towers) {
+    if (t.def.attack !== "none") continue;
+    for (const s of t.soldiers)
+      if (s !== primary && s.alive && near(s)) land(s);
+  }
+  for (const s of state.summonedSoldiers)
+    if (s !== primary && s.alive && near(s)) land(s);
+  if (state.hero && state.hero !== primary && state.hero.alive && near(state.hero)) land(state.hero);
+}
+
 function onProjectileHit(p) {
   if (p.chain > 0) {
     // Hits its target, then carries on into the next nearest creeps.
@@ -360,8 +399,8 @@ function updateSummonedSoldiers(dt) {
       if (s.attackCd <= 0) { damageEnemy(s.target, SUMMON.damage); s.attackCd = SUMMON.attackInterval; }
       s.target.attackCd -= dt;
       if (s.target.attackCd <= 0) {
-        s.hp -= CONFIG.enemy.meleeDamage;
-        s.target.attackCd = CONFIG.enemy.attackInterval;
+        enemyStrike(s.target, s);
+        s.target.attackCd = s.target.meleeInterval;
         if (s.hp <= 0) s.alive = false;
       }
     } else if (d > 1) {
@@ -436,9 +475,8 @@ function updateBarracks(tower, dt) {
       if (s.attackCd <= 0) { damageEnemy(s.target, tower.soldierDamage); s.attackCd = def.soldierAttackInterval; }
       s.target.attackCd -= dt;
       if (s.target.attackCd <= 0) {
-        s.hp -= CONFIG.enemy.meleeDamage;
-        s.sinceHit = 0; // reset the regen clock — just took a hit
-        s.target.attackCd = CONFIG.enemy.attackInterval;
+        enemyStrike(s.target, s);
+        s.target.attackCd = s.target.meleeInterval;
         if (s.hp <= 0) { s.alive = false; s.respawn = def.soldierRespawn; s.target = null; }
       }
     } else if (d > 1) {
@@ -514,9 +552,8 @@ function updateHero(dt) {
     }
     hero.target.attackCd -= dt;
     if (hero.target.attackCd <= 0) {
-      hero.hp -= CONFIG.enemy.meleeDamage;
-      hero.sinceHit = 0; // reset the regen clock — just took a hit
-      hero.target.attackCd = CONFIG.enemy.attackInterval;
+      enemyStrike(hero.target, hero);
+      hero.target.attackCd = hero.target.meleeInterval;
       if (hero.hp <= 0) { hero.alive = false; hero.respawn = def.respawnTime; hero.target = null; }
     }
   } else if (d > 1) {

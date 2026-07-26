@@ -11,7 +11,7 @@
 // is transcribed, so the guide cannot drift out of step with the game the way
 // the hand-written legend did.
 import { TOWER_TYPES, TYPE_LIST, specsFor } from "./data/towerTypes.js";
-import { ENEMY_KITS, ROLES } from "./data/enemyKits.js";
+import { ENEMY_KITS, ROLES, MASTERS } from "./data/enemyKits.js";
 import { HEROES, HERO_LEVELING } from "./data/hero.js";
 import { STAGES } from "./data/stages.js";
 import { el } from "./dom.js";
@@ -76,8 +76,13 @@ function paintOne(g, w, h, kind, key, extra) {
   // Enemy: normalise every creature to the same drawn size regardless of its
   // real radius, and sit it low enough that the health bar drawEnemy always
   // paints falls above the top edge instead of cluttering the tile.
-  const c = ENEMY_KITS[extra].creatures[key];
-  place(Math.min(1.45, (h - 6) / 32) * (15 / c.radius), h - 8);
+  const c = kind === "master" ? MASTERS[key] : ENEMY_KITS[extra].creatures[key];
+  // Normalise to a target drawn size. Divide out the recipe's own `scale` as
+  // well as the radius — drawEnemy applies that internally, so without this a
+  // 1.5x master compounds with the tile scale and bursts out of its frame.
+  const target = kind === "master" ? 17 : 15;    // masters still read bigger
+  const own = (c.art && c.art.scale) || 1;
+  place(Math.min(1.45, (h - 6) / 32) * (target / c.radius) / own, h - 8);
   drawEnemy({
     x: 0, y: 0, dist: 40, radius: c.radius, colors: c.colors, def: c,
     hp: 1, maxHp: 1, flying: c.flying, boss: !!c.boss,
@@ -177,7 +182,31 @@ function enemiesTab() {
       </div>
       <div class="g-kits">${byStage}</div>
     </div>`;
+  }).join("") + mastersSection();
+}
+
+// The five named figures that close out a stage. Kept apart from the roles
+// above because that's what they are: not a kind of enemy you learn to handle,
+// but one specific fight you meet once.
+function mastersSection() {
+  const rows = STAGES.map((st) => {
+    const m = MASTERS[st.kit];
+    const stats = [stat(`${m.hp} hp`), stat(`${m.speed} speed`), stat(`💰${m.reward}`),
+      stat(`${pct(m.armor)} armour`, "warn"), stat(`${pct(m.magicResist)} magic ward`, "warn")];
+    return `<div class="g-entry">
+      ${thumb(`master:${st.kit}`)}
+      <div>
+        <div class="g-name">${st.icon} ${m.name}</div>
+        <div class="g-desc">Stage ${st.numeral} · ${st.name} — final wave of the last level.</div>
+        <div class="g-stats">${stats.join("")}</div>
+      </div>
+    </div>`;
   }).join("");
+
+  return `<div class="g-section">Stage masters</div>` +
+    `<div class="g-lead">Each stage ends with one named figure, met exactly once. ` +
+    `They carry both armour and a ward, so neither an all-Oracle nor an all-Toxotai ` +
+    `board will get through — bring a line that does two things well.</div>` + rows;
 }
 
 // ----------------------------------------------------------------- heroes

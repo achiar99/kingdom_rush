@@ -100,6 +100,9 @@ const ROLE = {
   brood:     { hp: 84,   speed: 46,  armor: 0.1,  effective: 1.9 },
   revenant:  { hp: 120,  speed: 42,  armor: 0.15, effective: 1.4 },
   champion:  { hp: 1100, speed: 26,  armor: 0.35, effective: 1 },
+  // Not generated — appended by hand to one wave in the campaign — but it has
+  // to be weighable, because tableProfile() runs over the finished table.
+  master:    { hp: 4200, speed: 22,  armor: 0.4,  effective: 1 },
 };
 const BASE_SPEED = 55;
 const roleWeight = (r) =>
@@ -135,7 +138,7 @@ export function tableProfile(waves) {
 const CANDIDATES = 25;
 
 export function generateWaves(opts) {
-  const { seed } = opts;
+  const { seed, stageIndex, levelInStage, waveCount } = opts;
   const pool = Array.from({ length: CANDIDATES }, (_, i) => {
     const waves = buildTable({ ...opts, seed: seed + i * 7717 });
     return { waves, profile: tableProfile(waves) };
@@ -155,6 +158,25 @@ export function generateWaves(opts) {
     const miss = Math.abs(c.profile.perWave - midPerWave) / midPerWave +
                  Math.abs(c.profile.peak - midPeak) / midPeak;
     if (miss < bestMiss) { bestMiss = miss; best = c; }
+  }
+
+  // The stage master closes out the stage: last wave, last level, once.
+  //
+  // Added AFTER the median selection rather than before it, so it doesn't skew
+  // the comparison between candidate tables — every candidate for this level
+  // would carry the same master, and letting it into the profile would just
+  // shrink the fodder around it.
+  if (levelInStage === LEVELS_PER_STAGE - 1) {
+    const finale = best.waves[best.waves.length - 1];
+    finale.master = true;                       // so the UI can announce it
+    finale.groups.unshift({ type: "master", count: 1, gap: 4.5 });
+    // Thin the escort a little: the master IS the wave, and stacking it on top
+    // of an already-peak finale is how you get an unwinnable last level.
+    for (const g of finale.groups) {
+      if (g.type === "master") continue;
+      g.count = Math.max(1, Math.round(g.count * 0.7));
+    }
+    void stageIndex; void waveCount;
   }
   return best.waves;
 }

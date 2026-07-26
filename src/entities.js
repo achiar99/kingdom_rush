@@ -1,5 +1,5 @@
 // Factories + stat math for enemies, towers, barracks soldiers and the hero.
-import { SELL_REFUND } from "./config.js";
+import { CONFIG, SELL_REFUND } from "./config.js";
 import { TOWER_TYPES, specDef } from "./data/towerTypes.js";
 import { HERO_LEVELING } from "./data/hero.js";
 import { SUMMON } from "./data/abilities.js";
@@ -36,6 +36,10 @@ export function makeEnemy(entry, dist = 0) {
     // role mechanics — absent on most creatures, which is why they're read
     // with `|| 0` everywhere rather than assumed present
     magicResist: d.magicResist || 0,
+    // what this creep does to whatever blocks it
+    meleeDamage: (d.melee && d.melee.damage) ?? CONFIG.enemy.meleeDamage,
+    meleeInterval: (d.melee && d.melee.interval) ?? CONFIG.enemy.attackInterval,
+    cleave: (d.melee && d.melee.cleave) || 0,
     regen: (d.regen || 0) * entry.hpMul,   // scales with the wave, like HP
     splits: d.splits || 0,
     hpMul: entry.hpMul, speedMul: entry.speedMul,   // so a brood can seed its young
