@@ -9,6 +9,7 @@ import { LEVELS, wavesFor } from "./data/levels.js";
 import { currentWave, towerUnlockWave, abilityUnlockWave, maxTowerLevelFor } from "./data/unlocks.js";
 import { summonCountBonus, fireDpsMul, fireDurationBonus } from "./data/store.js";
 import { ABILITY_COOLDOWN, SUMMON, FIRE } from "./data/abilities.js";
+import { HERO_LEVELING } from "./data/hero.js";
 import { el } from "./dom.js";
 import { dist, nearestPointOnPath } from "./geometry.js";
 import { state, PATH, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
@@ -274,7 +275,7 @@ export function updateHud() {
   el("wave").textContent = Math.max(0, state.waveIndex + 1);
   const h = state.hero;
   el("heroHp").textContent = !h ? "—"
-    : h.alive ? Math.ceil(h.hp) + "/" + h.maxHp
+    : h.alive ? "Lv" + h.level + " · " + Math.ceil(h.hp) + "/" + h.maxHp
     : "💀 " + Math.ceil(h.respawn) + "s";
 
   const portrait = el("heroPortrait");
@@ -283,6 +284,12 @@ export function updateHud() {
   if (h) {
     el("heroPortraitHp").style.width = Math.max(0, (h.hp / h.maxHp) * 100) + "%";
     el("heroPortraitDowned").textContent = h.alive ? "" : "💀 " + Math.ceil(h.respawn) + "s";
+    el("heroLvl").textContent = h.level;
+    const atCap = h.level >= HERO_LEVELING.maxLevel;
+    el("heroPortraitXp").style.width = (atCap ? 100 : (h.xp / HERO_LEVELING.xpForNext(h.level)) * 100) + "%";
+    portrait.title = atCap
+      ? "Hero — level " + h.level + " (max)"
+      : "Hero — level " + h.level + " · " + Math.floor(h.xp) + "/" + HERO_LEVELING.xpForNext(h.level) + " XP";
   }
 
   syncAbilityButton("abilitySoldiers", "abilitySoldiersCd", state.abilityCooldowns.soldiers, "soldiers");

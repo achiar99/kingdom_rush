@@ -8,11 +8,11 @@
 import { CONFIG } from "./config.js";
 import { wavesFor } from "./data/levels.js";
 import { newUnlocksAt } from "./data/unlocks.js";
-import { HERO } from "./data/hero.js";
+import { HERO, HERO_LEVELING } from "./data/hero.js";
 import { FIRE, SUMMON } from "./data/abilities.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
-import { makeEnemy, damageEnemy } from "./entities.js";
+import { makeEnemy, damageEnemy, gainHeroXp } from "./entities.js";
 import { getDifficulty } from "./save.js";
 import { closeMenus, updateHud, updateButtons, setTip, endGame } from "./ui.js";
 
@@ -284,7 +284,7 @@ function updateHero(dt) {
   if (!hero.alive) {
     hero.respawn -= dt;
     if (hero.respawn <= 0) {
-      hero.alive = true; hero.hp = HERO.maxHp;
+      hero.alive = true; hero.hp = hero.maxHp; // level (and its max HP) survives death
       hero.x = hero.commandPos.x; hero.y = hero.commandPos.y;
       hero.target = null; hero.attackCd = 0; hero.sinceHit = 0; hero.forcedMove = false;
     }
@@ -294,7 +294,7 @@ function updateHero(dt) {
   // passive regen once it's been a few seconds since the hero last took a hit
   hero.sinceHit += dt;
   if (hero.sinceHit >= HERO.regenDelay && hero.hp < hero.maxHp)
-    hero.hp = Math.min(hero.maxHp, hero.hp + HERO.regenRate * dt);
+    hero.hp = Math.min(hero.maxHp, hero.hp + HERO_LEVELING.regenAt(hero.level) * dt);
 
   // While under orders (forcedMove), skip target-acquisition entirely — the
   // hero ignores every enemy, not just the one it was just fighting, so a
@@ -324,7 +324,16 @@ function updateHero(dt) {
     // locked in melee: block the creep and trade blows
     hero.target.engaged = true;
     hero.attackCd -= dt;
-    if (hero.attackCd <= 0) { damageEnemy(hero.target, HERO.damage); hero.attackCd = HERO.attackInterval; }
+    if (hero.attackCd <= 0) {
+      // damage scales with hero level; XP = damage dealt + bounty on the kill
+      const dmg = HERO_LEVELING.damageAt(hero.level);
+      damageEnemy(hero.target, dmg);
+      let xp = dmg;
+      if (hero.target.dead) xp += hero.target.reward;
+      if (gainHeroXp(hero, xp))
+        setTip("⭐ Hero reached level " + hero.level + (hero.level >= HERO_LEVELING.maxLevel ? " — max power!" : "!"));
+      hero.attackCd = HERO.attackInterval;
+    }
     hero.target.attackCd -= dt;
     if (hero.target.attackCd <= 0) {
       hero.hp -= CONFIG.enemy.meleeDamage;

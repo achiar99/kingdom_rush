@@ -152,9 +152,10 @@ export function drawHero(hero) {
     ctx.stroke();
   }
   groundShadow(hero.x + 2, hero.y + r * 0.8, r * 1.1, r * 0.45);
-  // gold-armored champion: red cape + plume set the hero apart from soldiers
+  // gold-armored champion: red cape + plume set the hero apart from soldiers;
+  // grows subtly with each level earned in battle
   drawKnight(hero.x, hero.y, {
-    s: 1.35, dir: faceTarget(hero), fighting: !!hero.target,
+    s: 1.35 + ((hero.level || 1) - 1) * 0.03, dir: faceTarget(hero), fighting: !!hero.target,
     tunic: [HERO.colors.light, HERO.colors.mid, HERO.colors.dark],
     helm: ["#ffe9a8", "#d9a222"], plume: "#c0392b", cape: "#a02c20",
   });

@@ -2,7 +2,7 @@
 import { SELL_REFUND } from "./config.js";
 import { ENEMY_TYPES } from "./data/enemyTypes.js";
 import { TOWER_TYPES } from "./data/towerTypes.js";
-import { HERO } from "./data/hero.js";
+import { HERO, HERO_LEVELING } from "./data/hero.js";
 import { SUMMON } from "./data/abilities.js";
 import { towerDamageMul, splashRadiusMul, soldierHpMul, soldierDamageMul, summonHpMul } from "./data/store.js";
 import { nearestPointOnPath } from "./geometry.js";
@@ -96,12 +96,33 @@ export function relocateRally(tower, newRally) {
 }
 
 export function makeHero(pos) {
+  const maxHp = HERO_LEVELING.maxHpAt(1);
   return {
     x: pos.x, y: pos.y, commandPos: { x: pos.x, y: pos.y },
-    hp: HERO.maxHp, maxHp: HERO.maxHp,
+    level: 1, xp: 0,                  // grows by fighting — see gainHeroXp
+    hp: maxHp, maxHp,
     alive: true, respawn: 0, target: null, attackCd: 0, sinceHit: 0,
     forcedMove: false,
   };
+}
+
+// Award hero XP (melee damage dealt + kill bounties). Levelling up re-derives
+// max HP, refills it, and celebrates with a gold ring. Returns true if at
+// least one level was gained so the caller can announce it.
+export function gainHeroXp(hero, amount) {
+  if (hero.level >= HERO_LEVELING.maxLevel) return false;
+  hero.xp += amount;
+  let leveled = false;
+  while (hero.level < HERO_LEVELING.maxLevel && hero.xp >= HERO_LEVELING.xpForNext(hero.level)) {
+    hero.xp -= HERO_LEVELING.xpForNext(hero.level);
+    hero.level++;
+    hero.maxHp = HERO_LEVELING.maxHpAt(hero.level);
+    hero.hp = hero.maxHp;
+    leveled = true;
+    state.effects.push({ x: hero.x, y: hero.y, maxR: 42, life: 0.6, maxLife: 0.6, kind: "levelup" });
+  }
+  if (hero.level >= HERO_LEVELING.maxLevel) hero.xp = 0; // bar reads full/idle at cap
+  return leveled;
 }
 
 // Player clicked the battlefield: send the hero there — immediately, even if

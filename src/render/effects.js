@@ -20,6 +20,17 @@ export function drawProjectile(p) {
 
 export function drawEffect(fx) {
   const t = 1 - fx.life / fx.maxLife;
+  if (fx.kind === "levelup") {
+    // hero level-up: expanding double gold ring
+    for (const [r, w] of [[fx.maxR * t, 4], [fx.maxR * t * 0.65, 2.5]]) {
+      ctx.beginPath();
+      ctx.arc(fx.x, fx.y, r, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,207,82,${0.9 * (1 - t)})`;
+      ctx.lineWidth = w;
+      ctx.stroke();
+    }
+    return;
+  }
   if (fx.kind === "ping") {
     // hero move-command acknowledgement: a thin expanding ring, no fill
     ctx.beginPath();

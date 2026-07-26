@@ -65,6 +65,20 @@
     background: rgba(0,0,0,.55); border-radius: 2px; overflow: hidden;
   }
   #heroPortrait .hp-fill { height: 100%; width: 100%; background: #5ad1a5; }
+  #heroPortrait .lvl-badge {
+    position: absolute; top: -7px; right: -7px;
+    width: 20px; height: 20px; border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 11px; font-weight: 800; color: #10141c;
+    background: radial-gradient(circle at 35% 30%, #ffe9a8, #ffcf52 60%, #d9a222);
+    border: 2px solid #fff3d0; box-shadow: 0 2px 6px rgba(0,0,0,.5);
+  }
+  #heroPortrait .xp-bar {
+    position: absolute; left: 5px; right: 5px; bottom: 11px; height: 3px;
+    background: rgba(0,0,0,.55); border-radius: 2px; overflow: hidden;
+  }
+  #heroPortrait .xp-fill { height: 100%; width: 0; background: var(--gold); }
+  #heroPortrait.downed .lvl-badge, #heroPortrait.downed .xp-bar { visibility: hidden; }
   #heroPortrait.downed { cursor: default; border-color: #545b68; }
   #heroPortrait.downed .icon, #heroPortrait.downed .hp-bar { visibility: hidden; }
   #heroPortrait .downed-label {
@@ -371,6 +385,8 @@
       <div id="abilityBar">
         <button id="heroPortrait" title="Select hero">
           <span class="icon">🦸</span>
+          <div class="lvl-badge" id="heroLvl">1</div>
+          <div class="xp-bar"><div class="xp-fill" id="heroPortraitXp"></div></div>
           <div class="hp-bar"><div class="hp-fill" id="heroPortraitHp"></div></div>
           <div class="downed-label" id="heroPortraitDowned"></div>
         </button>
