@@ -1,3 +1,4 @@
 .DS_Store
 .claude/settings.local.json
 tower-realm-save*.json
+save-slot-*.json

@@ -8,7 +8,7 @@ import { update } from "./simulation.js";
 import { render } from "./render.js";
 import { showMap } from "./worldmap.js";
 import { showSlotSelect } from "./slots.js";
-import { getActiveSlot, loadActiveSlotSilently } from "./save.js";
+import { getActiveSlot, loadActiveSlotSilently, syncFromDisk } from "./save.js";
 
 let last = performance.now();
 function loop(now) {
@@ -22,13 +22,17 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 
-// boot: resume straight into the last-used slot's map, or show slot-select
-// on a first-ever visit (or after all slots have been forgotten).
-const lastSlot = getActiveSlot();
-if (lastSlot !== null) {
-  loadActiveSlotSilently(lastSlot);
-  showMap();
-} else {
-  showSlotSelect();
-}
+// boot: first pull any newer save-slot-N.json files from disk (auto-save's
+// durable copy), then resume straight into the last-used slot's map, or show
+// slot-select on a first-ever visit (or after all slots have been forgotten).
+(async () => {
+  await syncFromDisk();
+  const lastSlot = getActiveSlot();
+  if (lastSlot !== null) {
+    loadActiveSlotSilently(lastSlot);
+    showMap();
+  } else {
+    showSlotSelect();
+  }
+})();
 requestAnimationFrame(loop);

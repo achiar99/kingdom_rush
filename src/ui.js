@@ -18,7 +18,7 @@ import {
 } from "./entities.js";
 import { canvas } from "./render.js";
 import { startNextWave } from "./simulation.js";
-import { markComplete, unlockLevel, exportProgress, importProgressFromFile, wipeProgress, getDifficulty } from "./save.js";
+import { markComplete, unlockLevel, wipeProgress, getDifficulty } from "./save.js";
 import { showMap, startLevel } from "./worldmap.js";
 import { showSlotSelect } from "./slots.js";
 
@@ -372,13 +372,6 @@ el("pauseBtn").addEventListener("click", () => {
   el("pauseBtn").textContent = state.paused ? "▶ Resume" : "⏸ Pause";
 });
 
-el("exportBtn").addEventListener("click", exportProgress);
-el("importBtn").addEventListener("click", () => el("importFile").click());
-el("importFile").addEventListener("change", (ev) => {
-  const file = ev.target.files[0];
-  if (file) importProgressFromFile(file);
-  ev.target.value = ""; // allow re-importing the same filename later
-});
 el("wipeBtn").addEventListener("click", wipeProgress);
 el("slotsBtn").addEventListener("click", showSlotSelect);
 

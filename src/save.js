@@ -1,5 +1,8 @@
-// Progress persistence: 3 independent save slots in localStorage, plus
-// export-to-file / import-from-file / wipe for the currently active slot.
+// Progress persistence: 3 independent save slots, auto-saved in two places —
+// localStorage (fast, synchronous) and, via the dev server's POST /api/save,
+// save-slot-<n>.json files next to the game. On boot syncFromDisk() pulls in
+// any disk copy that's newer than the local one, so progress survives cleared
+// browser storage and follows the project directory around.
 //
 // save.js and worldmap.js import from each other (worldmap reads `progress`
 // to render the map; save calls renderMap() after import/wipe so the map
@@ -120,6 +123,7 @@ export function selectSlot(i, difficultyKey) {
 
 export function deleteSlot(i) {
   localStorage.removeItem(slotKey(i));
+  pushSlotToDisk(i, null); // null deletes the slot's json file
   if (i === activeSlot) progress = defaultProgress();
 }
 
@@ -131,6 +135,40 @@ export function saveProgress() {
   if (activeSlot === null) return;
   progress.updatedAt = Date.now();
   try { localStorage.setItem(slotKey(activeSlot), JSON.stringify(progress)); } catch (e) {}
+  pushSlotToDisk(activeSlot, {
+    app: "tower-realm-save", version: SAVE_VERSION,
+    savedAt: new Date().toISOString(), progress,
+  });
+}
+
+// ---------------------------------------------------------- disk auto-save
+// Fire-and-forget write through the dev server; losing it is fine because
+// localStorage always has the same data (this is the durable backup copy).
+function pushSlotToDisk(i, data) {
+  try {
+    fetch("/api/save", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slot: i, data }),
+    }).catch(() => {});
+  } catch (e) { /* not served by serve.py (e.g. file://) — local-only mode */ }
+}
+
+// Boot-time pull: for each slot, if the json file on disk is newer than (or
+// missing from) localStorage, adopt it. Called by main.js before the first
+// screen renders.
+export async function syncFromDisk() {
+  await Promise.all([0, 1, 2].map(async (i) => {
+    try {
+      const res = await fetch(`/save-slot-${i + 1}.json`, { cache: "no-store" });
+      if (!res.ok) return;
+      const clean = sanitizeProgress(await res.json());
+      if (!clean) return;
+      const local = readSlotRaw(i);
+      if (!local || (clean.updatedAt || 0) > (local.updatedAt || 0))
+        localStorage.setItem(slotKey(i), JSON.stringify(clean));
+    } catch (e) { /* no dev server / offline — localStorage still works */ }
+  }));
 }
 
 // stars is optional — pass it whenever a level was just won to record (and
@@ -143,39 +181,6 @@ export function markComplete(id, stars) {
 export function getStars(id) { return progress.stars[id] || 0; }
 export function unlockLevel(idx) {
   if (idx < LEVELS.length && idx + 1 > progress.unlocked) { progress.unlocked = idx + 1; saveProgress(); }
-}
-
-export function exportProgress() {
-  const payload = {
-    app: "tower-realm-save", version: SAVE_VERSION,
-    savedAt: new Date().toISOString(), progress,
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "tower-realm-save-slot" + (activeSlot + 1) + ".json";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  setSaveTip("Save exported to your downloads.");
-}
-
-export function importProgressFromFile(file) {
-  const reader = new FileReader();
-  reader.onload = () => {
-    let parsed = null;
-    try { parsed = JSON.parse(reader.result); } catch (e) { /* fall through to error tip */ }
-    const clean = sanitizeProgress(parsed);
-    if (!clean) { setSaveTip("That file doesn't look like a Tower Realm save."); return; }
-    progress = clean;
-    saveProgress();
-    renderMap();
-    setSaveTip("Save imported into Slot " + (activeSlot + 1) + " — " + progress.done.length + " level(s) completed.");
-  };
-  reader.onerror = () => setSaveTip("Couldn't read that file.");
-  reader.readAsText(file);
 }
 
 export function wipeProgress() {
