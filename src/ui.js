@@ -1,26 +1,26 @@
 // DOM-facing glue: HUD, build/manage popup menus, canvas input handling,
 // control buttons, and the win/lose overlay.
 //
-// ui.js imports from simulation.js and worldmap.js, both of which import
-// back from ui.js. Safe circularity — see simulation.js for why.
+// simulation.js does NOT import this module — it talks to whatever screen is
+// attached through simHooks, and the installSimHooks() call at the bottom of
+// this file is what plugs the real DOM in. ui.js and worldmap.js still import
+// from each other; safe circularity, since every cross-reference is only
+// *called* inside a function body, long after both have finished loading.
 import { CONFIG, MAX_LEVEL } from "./config.js";
 import { TOWER_TYPES, TYPE_LIST } from "./data/towerTypes.js";
 import { LEVELS, wavesFor } from "./data/levels.js";
-import { currentWave, towerUnlockWave, abilityUnlockWave, maxTowerLevelFor } from "./data/unlocks.js";
-import { summonCountBonus, fireDpsMul, fireDurationBonus } from "./data/store.js";
-import { ABILITY_COOLDOWN, SUMMON, FIRE } from "./data/abilities.js";
-import { HEROES, DEFAULT_HERO, HERO_LEVELING } from "./data/hero.js";
+import { maxTowerLevelFor } from "./data/unlocks.js";
+import { HERO_LEVELING } from "./data/hero.js";
 import { el } from "./dom.js";
-import { dist, nearestPointOnPath } from "./geometry.js";
-import { state, PATH, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
-import {
-  makeTower, computeStats, upgradeCost, sellValue, relocateRally,
-  makeHero, commandHero, makeSummonedSoldier,
-} from "./entities.js";
+import { dist } from "./geometry.js";
+import { state, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
+import { upgradeCost, sellValue } from "./entities.js";
+import * as act from "./actions.js";
 import { canvas } from "./render.js";
-import { startNextWave } from "./simulation.js";
-import { progress, markComplete, unlockLevel, wipeProgress, getDifficulty } from "./save.js";
-import { showMap, startLevel } from "./worldmap.js";
+import { startNextWave, resetRun } from "./simulation.js";
+import { installSimHooks } from "./simHooks.js";
+import { activeSlot, resetProgress } from "./save.js";
+import { showMap, startLevel, renderMap } from "./worldmap.js";
 import { showSlotSelect } from "./slots.js";
 
 // ---------------------------------------------------------------- popup menus
@@ -61,8 +61,7 @@ function syncBuildMenu(force = false) {
   if (!force && (!state.menuSpot || !buildMenu.classList.contains("show"))) return;
   for (const btn of buildMenu.querySelectorAll(".tower-opt")) {
     const def = TOWER_TYPES[btn.dataset.key];
-    const unlockAt = towerUnlockWave(LEVEL.index, btn.dataset.key);
-    const locked = unlockAt === null || currentWave(state) < unlockAt;
+    const { locked, wave: unlockAt } = act.towerUnlockState(btn.dataset.key);
     btn.disabled = locked || state.gold < def.cost;      // cheap, safe to set every frame
     const lockState = locked ? (unlockAt === null ? "realm" : "w" + unlockAt) : "open";
     if (btn.dataset.lockState === lockState) continue;   // label/tooltip already right
@@ -82,15 +81,11 @@ function closeBuildMenu() {
 }
 
 function buildTower(spot, key) {
-  const def = TOWER_TYPES[key];
-  const unlockAt = towerUnlockWave(LEVEL.index, key);
-  if (unlockAt === null || currentWave(state) < unlockAt) return;
+  if (act.towerUnlockState(key).locked) return;
   if (spotOccupied(spot)) return closeBuildMenu();
-  if (state.gold < def.cost) { setTip("Not enough gold for " + def.name + " (need " + def.cost + ")."); return; }
-  state.gold -= def.cost;
-  state.towers.push(makeTower(spot, key));
-  setTip("");
-  closeBuildMenu();
+  const res = act.buildTower(spot, key);
+  setTip(res.ok ? "" : res.reason);
+  if (res.ok) closeBuildMenu();
   updateHud();
 }
 
@@ -150,24 +145,18 @@ function closeManageMenu() {
 
 function upgradeTower(t) {
   if (t.level >= maxTowerLevelFor(LEVEL.index)) return;
-  const cost = upgradeCost(t);
-  if (state.gold < cost) { setTip("Not enough gold to upgrade (need " + cost + ")."); return; }
-  state.gold -= cost;
-  t.level++;
-  t.invested += cost;
-  computeStats(t);
-  setTip("");
+  const res = act.upgradeTower(t);
+  setTip(res.ok ? "" : res.reason);
   updateHud();
-  openManageMenu(t); // refresh the panel with new level / costs
+  if (res.ok) openManageMenu(t); // refresh the panel with new level / costs
 }
 
 function sellTower(t) {
-  const refund = sellValue(t);
-  state.gold += refund;
-  state.towers = state.towers.filter((x) => x !== t);
+  const name = t.def.name;
+  const refund = act.sellTower(t);
   closeManageMenu();
   updateHud();
-  setTip("Sold " + t.def.name + " for " + refund + " gold.");
+  setTip("Sold " + name + " for " + refund + " gold.");
 }
 
 // ---------------------------------------------------------------- input
@@ -186,39 +175,19 @@ canvas.addEventListener("click", (ev) => {
 
   // ability placement takes priority over everything else — clicking
   // anywhere on the field (even a build spot) commits the ability there
-  if (state.placingAbility === "soldiers") {
-    const count = SUMMON.count + summonCountBonus();
-    for (let i = 0; i < count; i++)
-      state.summonedSoldiers.push(makeSummonedSoldier({ x, y }, (i / count) * Math.PI * 2));
-    state.abilityCooldowns.soldiers = ABILITY_COOLDOWN;
+  if (state.placingAbility) {
+    const res = state.placingAbility === "soldiers"
+      ? act.castReinforcements(x, y)
+      : act.castIgnite(x, y);
     state.placingAbility = null;
-    setTip("");
-    return;
-  }
-  if (state.placingAbility === "fire") {
-    for (const e of state.enemies) {
-      if (e.dead || dist(x, y, e.x, e.y) > FIRE.radius) continue;
-      e.burning = true;
-      e.burnFor = FIRE.duration + fireDurationBonus();
-      e.burnDps = FIRE.dps * fireDpsMul();
-    }
-    state.effects.push({ x, y, maxR: FIRE.radius, life: 0.4, maxLife: 0.4 });
-    state.abilityCooldowns.fire = ABILITY_COOLDOWN;
-    state.placingAbility = null;
-    setTip("");
+    setTip(res.ok ? "" : res.reason);
     return;
   }
 
   if (state.repositioning) {
-    const tower = state.repositioning;
-    const snapped = nearestPointOnPath(PATH, x, y);
-    if (dist(tower.x, tower.y, snapped.x, snapped.y) <= tower.def.rallyReach) {
-      relocateRally(tower, snapped);
-      state.repositioning = null;
-      setTip("");
-    } else {
-      setTip("Too far — click somewhere inside the glowing circle.");
-    }
+    const res = act.relocateRallyPoint(state.repositioning, x, y);
+    if (res.ok) state.repositioning = null;
+    setTip(res.ok ? "" : res.reason);
     return;
   }
 
@@ -239,7 +208,7 @@ canvas.addEventListener("click", (ev) => {
   const hero = state.hero;
   if (!hero || !hero.alive) return;
   if (state.heroSelected) {
-    commandHero(hero, x, y);
+    act.moveHero(x, y);
     state.effects.push({ x, y, maxR: 26, life: 0.4, maxLife: 0.4, kind: "ping" });
     state.heroSelected = false;
   } else if (dist(x, y, hero.x, hero.y) <= 20) {
@@ -302,10 +271,9 @@ export function updateHud() {
 // null when usable now; otherwise the lock label ("🔒" for the whole level,
 // "🔒w4" when it opens up at a later wave of this one)
 function abilityLock(key) {
-  if (!LEVEL) return "🔒";
-  const at = abilityUnlockWave(LEVEL.index, key);
-  if (at === null) return "🔒";
-  return currentWave(state) < at ? "🔒w" + at : null;
+  const { locked, wave } = act.abilityUnlockState(key);
+  if (!locked) return null;
+  return wave === null ? "🔒" : "🔒w" + wave;
 }
 
 // Grey out an ability square while locked or cooling down, with a label why.
@@ -338,24 +306,10 @@ export function updateButtons() {
 
 export function setTip(msg) { el("tip").textContent = msg; }
 
-// Star rating is based on % of that playthrough's starting lives left at the
-// end — thresholds scale with the level/difficulty's actual life total
-// instead of a fixed number, so e.g. Emberfall (18 lives) or Hard (×0.8)
-// rate fairly against the same bar as a standard 20-life Normal run.
-function starsForRun() {
-  const startingLives = Math.round(LEVEL.startLives * getDifficulty().livesMul);
-  const pct = state.lives / startingLives;
-  return pct >= 0.9 ? 3 : pct >= 0.55 ? 2 : 1;
-}
-
-export function endGame(won) {
-  state.over = true;
-  state.running = false;
-  closeMenus();
+// The win/lose overlay. Installed as simHooks.onGameOver, so simulation.js
+// fires it after it has already frozen the run and banked the star rating.
+function showGameOverOverlay(won, stars) {
   const nextIdx = LEVEL.index + 1;
-  const stars = won ? starsForRun() : 0;
-  if (won) { markComplete(LEVEL.id, stars); unlockLevel(nextIdx); }
-
   el("overlayTitle").textContent = won ? "🏆 Victory!" : "💀 Defeated";
   el("overlaySub").textContent = won
     ? LEVEL.name + " defended against every wave! " + "★".repeat(stars) + "☆".repeat(3 - stars)
@@ -374,8 +328,15 @@ export function endGame(won) {
   mk(won ? "Replay" : "Retry", "secondary", () => startLevel(LEVEL.index));
   mk("🗺 World map", "secondary", showMap);
   el("overlay").classList.add("show");
-  updateButtons();
 }
+
+// Hand the running game its screen. Everything here is presentation only —
+// the rules in simulation.js work the same with these left as no-ops, which
+// is exactly how the balance harness (tools/sim) drives them.
+installSimHooks({
+  closeMenus, updateHud, updateButtons, setTip,
+  onGameOver: showGameOverOverlay,
+});
 
 el("startBtn").addEventListener("click", startNextWave);
 el("resetBtn").addEventListener("click", () => startLevel(LEVEL.index));
@@ -390,7 +351,12 @@ el("pauseBtn").addEventListener("click", () => {
   el("pauseBtn").textContent = state.paused ? "▶ Resume" : "⏸ Pause";
 });
 
-el("wipeBtn").addEventListener("click", wipeProgress);
+el("wipeBtn").addEventListener("click", () => {
+  if (!confirm("Erase progress in Slot " + (activeSlot + 1) + "? This can't be undone.")) return;
+  resetProgress();
+  renderMap();
+  el("saveTip").textContent = "Slot " + (activeSlot + 1) + " erased.";
+});
 el("slotsBtn").addEventListener("click", showSlotSelect);
 
 // bottom-left hero portrait: selects the hero, same as clicking it on the
@@ -405,45 +371,35 @@ el("heroPortrait").addEventListener("click", () => {
 // Both ability squares arm a "placement" mode instead of casting instantly —
 // the actual effect happens wherever the player clicks next (see the canvas
 // click handler above, which checks state.placingAbility first).
-el("abilitySoldiers").addEventListener("click", () => {
-  const lock = abilityLock("soldiers");
-  if (lock) { setTip(lock === "🔒" ? "Reinforcements aren't available in this realm yet." : "Reinforcements unlock at wave " + lock.slice(2) + "."); return; }
-  if (state.abilityCooldowns.soldiers > 0) return;
+function armAbility(key, copy) {
+  const { locked, wave } = act.abilityUnlockState(key);
+  if (locked) {
+    setTip(wave === null ? copy.realmLocked : copy.waveLocked(wave));
+    return;
+  }
+  if (state.abilityCooldowns[key] > 0) return;
   state.repositioning = null;
   state.heroSelected = false;
   closeMenus();
-  state.placingAbility = "soldiers";
-  setTip("Click where to send in reinforcements. Esc to cancel.");
-});
+  state.placingAbility = key;
+  setTip(copy.prompt);
+}
 
-el("abilityFire").addEventListener("click", () => {
-  const lock = abilityLock("fire");
-  if (lock) { setTip(lock === "🔒" ? "Ignite isn't available in this realm yet." : "Ignite unlocks at wave " + lock.slice(2) + "."); return; }
-  if (state.abilityCooldowns.fire > 0) return;
-  state.repositioning = null;
-  state.heroSelected = false;
-  closeMenus();
-  state.placingAbility = "fire";
-  setTip("Click where to set enemies ablaze. Esc to cancel.");
-});
+el("abilitySoldiers").addEventListener("click", () => armAbility("soldiers", {
+  realmLocked: "Reinforcements aren't available in this realm yet.",
+  waveLocked: (w) => "Reinforcements unlock at wave " + w + ".",
+  prompt: "Click where to send in reinforcements. Esc to cancel.",
+}));
+
+el("abilityFire").addEventListener("click", () => armAbility("fire", {
+  realmLocked: "Ignite isn't available in this realm yet.",
+  waveLocked: (w) => "Ignite unlocks at wave " + w + ".",
+  prompt: "Click where to set enemies ablaze. Esc to cancel.",
+}));
 
 export function resetGame() {
-  const diff = getDifficulty();
-  const endP = PATH[PATH.length - 1];
-  const heroDef = HEROES[progress.hero] || HEROES[DEFAULT_HERO];
+  const { diff, heroDef } = resetRun();
   el("heroPortrait").querySelector(".icon").textContent = heroDef.icon;
-  Object.assign(state, {
-    gold: Math.round(LEVEL.startGold * diff.goldMul),
-    lives: Math.round(LEVEL.startLives * diff.livesMul),
-    waveIndex: -1,
-    enemies: [], towers: [], projectiles: [], effects: [],
-    hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
-    summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
-    spawnQueue: [], spawnTimer: 0,
-    running: false, over: false, paused: false, speed: 1,
-    hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
-    heroSelected: false, placingAbility: null, hoverPos: null,
-  });
   el("levelName").textContent = LEVEL.name + " · " + diff.icon + " " + diff.name;
   el("speedBtn").textContent = "Speed: 1×";
   el("pauseBtn").textContent = "⏸ Pause";

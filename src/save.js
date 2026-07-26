@@ -4,15 +4,24 @@
 // any disk copy that's newer than the local one, so progress survives cleared
 // browser storage and follows the project directory around.
 //
-// save.js and worldmap.js import from each other (worldmap reads `progress`
-// to render the map; save calls renderMap() after import/wipe so the map
-// reflects the change immediately). Safe circularity — see simulation.js
-// for why.
+// This module is deliberately DOM-free (the confirm-and-redraw half of
+// "erase slot" lives in ui.js), so the balance harness in tools/sim can
+// import it under Node to set a run's difficulty, hero and star upgrades.
 import { LEVELS } from "./data/levels.js";
 import { DIFFICULTIES } from "./data/difficulties.js";
 import { HEROES, DEFAULT_HERO } from "./data/hero.js";
-import { el } from "./dom.js";
-import { renderMap } from "./worldmap.js";
+
+// Outside a browser there is no localStorage; an in-memory stand-in keeps
+// every read/write below working unchanged (and un-persisted, which is what
+// a headless simulation run wants anyway).
+const store = typeof localStorage !== "undefined" ? localStorage : (() => {
+  const mem = new Map();
+  return {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: (k) => mem.delete(k),
+  };
+})();
 
 export const SLOT_COUNT = 3;
 const ACTIVE_KEY = "towerRealm.activeSlot";
@@ -66,28 +75,28 @@ function sanitizeProgress(raw) {
 }
 
 function readSlotRaw(i) {
-  try { return sanitizeProgress(JSON.parse(localStorage.getItem(slotKey(i)))); }
+  try { return sanitizeProgress(JSON.parse(store.getItem(slotKey(i)))); }
   catch (e) { return null; }
 }
 
 // A one-time upgrade for anyone with data from before save slots existed:
 // drop it into slot 0 and make that the active slot, so nothing is lost.
 function migrateLegacySave() {
-  if (localStorage.getItem(ACTIVE_KEY) !== null) return;
+  if (store.getItem(ACTIVE_KEY) !== null) return;
   if ([0, 1, 2].some((i) => readSlotRaw(i))) return;
-  const legacy = sanitizeProgress(JSON.parse(localStorage.getItem(LEGACY_KEY) || "null"));
+  const legacy = sanitizeProgress(JSON.parse(store.getItem(LEGACY_KEY) || "null"));
   if (legacy) {
-    localStorage.setItem(slotKey(0), JSON.stringify(legacy));
-    localStorage.setItem(ACTIVE_KEY, "0");
+    store.setItem(slotKey(0), JSON.stringify(legacy));
+    store.setItem(ACTIVE_KEY, "0");
   }
-  localStorage.removeItem(LEGACY_KEY);
+  store.removeItem(LEGACY_KEY);
 }
 migrateLegacySave();
 
 // Which slot (if any) was last explicitly opened — lets the game resume
 // straight into it on the next visit instead of showing slot-select again.
 export function getActiveSlot() {
-  const stored = localStorage.getItem(ACTIVE_KEY);
+  const stored = store.getItem(ACTIVE_KEY);
   if (stored === null) return null; // Number(null) is 0, so this check can't be skipped
   const raw = Number(stored);
   return Number.isInteger(raw) && raw >= 0 && raw < SLOT_COUNT ? raw : null;
@@ -120,12 +129,12 @@ export function selectSlot(i, difficultyKey) {
   const existing = readSlotRaw(i);
   activeSlot = i;
   progress = existing || defaultProgress(difficultyKey);
-  localStorage.setItem(ACTIVE_KEY, String(i));
+  store.setItem(ACTIVE_KEY, String(i));
   saveProgress();
 }
 
 export function deleteSlot(i) {
-  localStorage.removeItem(slotKey(i));
+  store.removeItem(slotKey(i));
   pushSlotToDisk(i, null); // null deletes the slot's json file
   if (i === activeSlot) progress = defaultProgress();
 }
@@ -137,7 +146,7 @@ export function getDifficulty() {
 export function saveProgress() {
   if (activeSlot === null) return;
   progress.updatedAt = Date.now();
-  try { localStorage.setItem(slotKey(activeSlot), JSON.stringify(progress)); } catch (e) {}
+  try { store.setItem(slotKey(activeSlot), JSON.stringify(progress)); } catch (e) {}
   pushSlotToDisk(activeSlot, {
     app: "tower-realm-save", version: SAVE_VERSION,
     savedAt: new Date().toISOString(), progress,
@@ -169,7 +178,7 @@ export async function syncFromDisk() {
       if (!clean) return;
       const local = readSlotRaw(i);
       if (!local || (clean.updatedAt || 0) > (local.updatedAt || 0))
-        localStorage.setItem(slotKey(i), JSON.stringify(clean));
+        store.setItem(slotKey(i), JSON.stringify(clean));
     } catch (e) { /* no dev server / offline — localStorage still works */ }
   }));
 }
@@ -186,12 +195,16 @@ export function unlockLevel(idx) {
   if (idx < LEVELS.length && idx + 1 > progress.unlocked) { progress.unlocked = idx + 1; saveProgress(); }
 }
 
-export function wipeProgress() {
-  if (!confirm("Erase progress in Slot " + (activeSlot + 1) + "? This can't be undone.")) return;
-  progress = defaultProgress(progress.difficulty); // keep the slot's difficulty, just reset progress
+// Blank the active slot, keeping the difficulty it was created with. The
+// confirm prompt and the map redraw are ui.js's job (see the wipeBtn handler).
+export function resetProgress() {
+  progress = defaultProgress(progress.difficulty);
   saveProgress();
-  renderMap();
-  setSaveTip("Slot " + (activeSlot + 1) + " erased.");
 }
 
-function setSaveTip(msg) { el("saveTip").textContent = msg; }
+// Used by the balance harness to configure a run — difficulty, hero and star
+// upgrade ranks all read through `progress`, and nothing is persisted while
+// activeSlot is null (saveProgress bails out early).
+export function setProgressForSimulation(partial) {
+  progress = sanitizeProgress({ ...defaultProgress(), ...partial }) || defaultProgress();
+}

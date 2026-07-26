@@ -1,20 +1,42 @@
 // The per-frame game simulation: spawning, movement, combat, wave lifecycle.
 //
-// Note: this module and ui.js import from each other (simulation needs
-// endGame/updateHud/etc for game-over and HUD refresh; ui needs
-// startNextWave for the Start Wave button). That's a deliberate circular
-// import — safe here because every cross-reference is only *called* inside
-// a function body, long after both modules have finished loading.
+// This module is deliberately DOM-free. Everything the running game wants to
+// *show* someone goes through simHooks (no-ops until ui.js installs the real
+// screen), so the exact same rules can be driven headlessly — see the balance
+// harness in tools/sim, which runs whole levels thousands of times.
 import { CONFIG } from "./config.js";
 import { wavesFor } from "./data/levels.js";
 import { newUnlocksAt } from "./data/unlocks.js";
-import { HERO_LEVELING } from "./data/hero.js";
+import { HERO_LEVELING, HEROES, DEFAULT_HERO } from "./data/hero.js";
 import { FIRE, SUMMON } from "./data/abilities.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
-import { makeEnemy, damageEnemy, gainHeroXp } from "./entities.js";
-import { getDifficulty } from "./save.js";
-import { closeMenus, updateHud, updateButtons, setTip, endGame } from "./ui.js";
+import { makeEnemy, damageEnemy, gainHeroXp, makeHero } from "./entities.js";
+import { getDifficulty, markComplete, unlockLevel, progress } from "./save.js";
+import { simHooks } from "./simHooks.js";
+
+// Wipe the world back to the start of the currently-loaded level. Pure state,
+// no DOM: ui.js's resetGame() calls this and then relabels the HUD, and the
+// balance harness calls it between runs. Returns the bits the caller needs to
+// display (which difficulty and hero this run is being played with).
+export function resetRun() {
+  const diff = getDifficulty();
+  const heroDef = HEROES[progress.hero] || HEROES[DEFAULT_HERO];
+  const endP = PATH[PATH.length - 1];
+  Object.assign(state, {
+    gold: Math.round(LEVEL.startGold * diff.goldMul),
+    lives: Math.round(LEVEL.startLives * diff.livesMul),
+    waveIndex: -1,
+    enemies: [], towers: [], projectiles: [], effects: [],
+    hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
+    summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
+    spawnQueue: [], spawnTimer: 0,
+    running: false, over: false, paused: false, speed: 1,
+    hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
+    heroSelected: false, placingAbility: null, hoverPos: null,
+  });
+  return { diff, heroDef };
+}
 
 export function startNextWave() {
   if (state.over || state.running) return;
@@ -31,9 +53,9 @@ export function startNextWave() {
       state.spawnQueue.push({ type: g.type, gap: g.gap, hpMul, speedMul: wave.speedMul });
   state.spawnTimer = 0;
   state.running = true;
-  closeMenus();
-  updateHud();
-  updateButtons();
+  simHooks.closeMenus();
+  simHooks.updateHud();
+  simHooks.updateButtons();
 }
 
 export function waveCleared() {
@@ -43,12 +65,34 @@ export function waveCleared() {
   } else {
     state.gold += CONFIG.waveClearBonus;
     const fresh = newUnlocksAt(LEVEL.index, state.waveIndex + 2);
-    setTip("Wave cleared! +" + CONFIG.waveClearBonus + " gold." +
+    simHooks.setTip("Wave cleared! +" + CONFIG.waveClearBonus + " gold." +
       (fresh.length ? " 🔓 Unlocked: " + fresh.join(", ") + "!" : "") +
       " Build up, then start the next wave.");
   }
-  updateHud();
-  updateButtons();
+  simHooks.updateHud();
+  simHooks.updateButtons();
+}
+
+// Star rating is based on % of that playthrough's starting lives left at the
+// end — thresholds scale with the level/difficulty's actual life total
+// instead of a fixed number, so e.g. Emberfall (18 lives) or Hard (×0.8)
+// rate fairly against the same bar as a standard 20-life Normal run.
+export function starsForRun() {
+  const startingLives = Math.round(LEVEL.startLives * getDifficulty().livesMul);
+  const pct = state.lives / startingLives;
+  return pct >= 0.9 ? 3 : pct >= 0.55 ? 2 : 1;
+}
+
+// Terminal state for a run: freeze the world, bank the result in `progress`,
+// then let whoever is watching (ui.js's overlay, the balance harness) react.
+export function endGame(won) {
+  state.over = true;
+  state.running = false;
+  simHooks.closeMenus();
+  const stars = won ? starsForRun() : 0;
+  if (won) { markComplete(LEVEL.id, stars); unlockLevel(LEVEL.index + 1); }
+  simHooks.onGameOver(won, stars);
+  simHooks.updateButtons();
 }
 
 export function update(dt) {
@@ -146,7 +190,7 @@ export function update(dt) {
   if (state.running && state.spawnQueue.length === 0 && state.enemies.length === 0)
     waveCleared();
 
-  updateHud();
+  simHooks.updateHud();
 }
 
 function onProjectileHit(p) {
@@ -166,7 +210,7 @@ function onProjectileHit(p) {
 // gainHeroXp + the level-up announcement, shared by melee hits and projectiles
 function awardHeroXp(hero, xp) {
   if (gainHeroXp(hero, xp))
-    setTip("⭐ " + hero.def.name + " reached level " + hero.level +
+    simHooks.setTip("⭐ " + hero.def.name + " reached level " + hero.level +
       (hero.level >= HERO_LEVELING.maxLevel ? " — max power!" : "!"));
 }
 

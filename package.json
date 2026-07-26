@@ -1,0 +1,10 @@
+{
+  "name": "tower-realm",
+  "private": true,
+  "type": "module",
+  "description": "Browser tower-defense game. No build step — index.html loads src/main.js directly; package.json exists so Node can run the balance harness in tools/sim against the same source.",
+  "scripts": {
+    "balance": "node tools/sim/cli.js",
+    "serve": "python3 serve.py"
+  }
+}
