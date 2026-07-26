@@ -345,6 +345,10 @@ export function updateButtons() {
   if (done && !state.running) { btn.textContent = "All waves done"; return; }
   if (state.running) { btn.textContent = "Wave " + (state.waveIndex + 1) + " incoming…"; return; }
 
+  // Wave 1 has no clock and no bonus — it waits for the player, so the button
+  // is phrased as the thing that starts the battle rather than as hurrying it.
+  if (state.waveIndex === -1) { btn.textContent = "▶ Begin — start wave 1"; return; }
+
   // Between waves: show the countdown and what sending it early would pay, so
   // the trade (build time vs. gold) is visible at the moment it's being made.
   const label = "Send wave " + (state.waveIndex + 2);

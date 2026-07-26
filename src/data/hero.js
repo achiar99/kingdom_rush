@@ -7,13 +7,18 @@
 // range — INCLUDING flyers, which no melee unit can touch — and only fight
 // hand-to-hand when something walks right into them.
 //
+// A ranged hero's reach stays BELOW the cheapest attacking tower (Toxotai,
+// 130). A hero is free, mobile, and comes back when it dies; a tower is paid
+// for, rooted to one spot forever, and reach is the whole thing it buys. When
+// Atalanta out-ranged the 115-gold Oracle there was no reason to build one.
+//
 // Balance: everyone gets a similar power budget, spent differently —
 //              HP   DPS   speed  reach          respawn
 //   achilles   220  28.6  100    melee          18s   the all-rounder
 //   ajax       350  31.6   70    melee          24s   a wall with a spear, slow
-//   atalanta   130  28.9  115    ranged 160     14s   fragile, kites, hits flyers
+//   atalanta   130  28.9  115    ranged 112     14s   fragile, kites, hits flyers
 //   perseus    150  35.7  150    melee          12s   highest dps, dies fast
-//   circe      180  33.3   85    ranged 130     20s   armour-ignoring sorcery
+//   circe      180  33.3   85    ranged  96     20s   armour-ignoring sorcery
 export const HEROES = {
   achilles: {
     key: "achilles", name: "Achilles", icon: "⚔️",
@@ -38,7 +43,7 @@ export const HEROES = {
   atalanta: {
     key: "atalanta", name: "Atalanta", icon: "🏹",
     tagline: "Raised by a bear, faster than her suitors, hits flyers",
-    attack: "ranged", range: 160, projectileSpeed: 480, projColor: "#d8f08a",
+    attack: "ranged", range: 112, projectileSpeed: 480, projColor: "#d8f08a",
     maxHp: 130, damage: 13, attackInterval: 0.45,
     speed: 115, meleeRange: 20, aggroRadius: 120,
     respawnTime: 14, regenDelay: 4, regenRate: 10,
@@ -59,7 +64,7 @@ export const HEROES = {
   circe: {
     key: "circe", name: "Circe", icon: "🪄",
     tagline: "Sorceress of Aiaia — her curses do not care about bronze",
-    attack: "ranged", range: 130, projectileSpeed: 420, projColor: "#e0a8ff", magic: true,
+    attack: "ranged", range: 96, projectileSpeed: 420, projColor: "#e0a8ff", magic: true,
     maxHp: 180, damage: 30, attackInterval: 0.9,
     speed: 85, meleeRange: 20, aggroRadius: 120,
     respawnTime: 20, regenDelay: 5, regenRate: 11,

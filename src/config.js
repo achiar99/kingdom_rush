@@ -7,7 +7,11 @@ export const CONFIG = {
   // a battle has its own momentum instead of waiting on a button. Sending the
   // wave early pays out the time you didn't use — the standard tower-defense
   // trade of breathing room against gold.
-  firstWaveDelay: 30,     // seconds before wave 1 launches itself
+  //
+  // Wave 1 is the exception: no clock, no auto-start. The opening of a level
+  // is the one moment the player needs unhurried — reading an unfamiliar map,
+  // seeing which towers are unlocked, choosing the first spot — so the battle
+  // doesn't begin until they say so. Every wave after that is on the timer.
   nextWaveDelay: 22,      // seconds of build time after a wave is cleared
   earlyCallGold: 2,       // gold per whole second saved by calling the wave in
   enemy: {

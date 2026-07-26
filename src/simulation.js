@@ -34,7 +34,7 @@ export function resetRun() {
     hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
     summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
     spawnQueue: [], spawnTimer: 0,
-    nextWaveIn: CONFIG.firstWaveDelay,
+    nextWaveIn: 0,     // no clock before wave 1 — the player opens the battle
     running: false, over: false, paused: false, speed: 1,
     hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
     heroSelected: false, placingAbility: null, hoverPos: null,
