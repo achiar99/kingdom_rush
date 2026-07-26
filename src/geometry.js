@@ -11,19 +11,43 @@ export function pathLength(path) {
   return total;
 }
 
+// Cumulative arc length at each vertex, built once per path and remembered.
+//
+// Roads used to be ten-point zigzags, so walking them linearly cost nothing.
+// They're now smooth curves tessellated into a few hundred segments, and
+// pointAtDistance runs for every creep every frame — linear scanning would
+// make that thirty times more expensive. The table turns it into a binary
+// search, which is flat in the number of segments.
+const cumCache = new WeakMap();
+
+function cumulative(path) {
+  let cum = cumCache.get(path);
+  if (!cum) {
+    cum = new Float64Array(path.length);
+    for (let i = 1; i < path.length; i++)
+      cum[i] = cum[i - 1] + dist(path[i - 1].x, path[i - 1].y, path[i].x, path[i].y);
+    cumCache.set(path, cum);
+  }
+  return cum;
+}
+
 // Convert a distance travelled along the path into an {x, y} position.
 export function pointAtDistance(path, pathLen, d) {
-  let remaining = d;
-  for (let i = 1; i < path.length; i++) {
-    const a = path[i - 1], b = path[i];
-    const seg = dist(a.x, a.y, b.x, b.y);
-    if (remaining <= seg) {
-      const t = seg === 0 ? 0 : remaining / seg;
-      return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-    }
-    remaining -= seg;
+  const last = path.length - 1;
+  if (d <= 0) return { x: path[0].x, y: path[0].y };
+  const cum = cumulative(path);
+  if (d >= cum[last]) return { x: path[last].x, y: path[last].y };
+
+  // largest i with cum[i] <= d
+  let lo = 0, hi = last;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (cum[mid] <= d) lo = mid; else hi = mid - 1;
   }
-  return { x: path[path.length - 1].x, y: path[path.length - 1].y };
+  const a = path[lo], b = path[lo + 1];
+  const seg = cum[lo + 1] - cum[lo];
+  const t = seg === 0 ? 0 : (d - cum[lo]) / seg;
+  return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
 // Nearest point on the path to (px,py) — used to rally soldiers onto the road.

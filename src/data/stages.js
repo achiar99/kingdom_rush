@@ -89,7 +89,7 @@ export const STAGES = [
     themes: ["ilion", "troad", "aegean"],
     // The stage's difficulty, as [first level, last level]. The eight levels
     // between interpolate. This is the only difficulty number a stage owns.
-    hpScale: [1.0, 5.5],
+    hpScale: [1.0, 6.0],
     icon: "🛡️",
   },
   {
@@ -97,7 +97,7 @@ export const STAGES = [
     blurb: "Past the last olive terrace, older things are still awake.",
     kit: "arcadia",
     themes: ["olive", "arkadia", "alpheios"],
-    hpScale: [5.6, 5.7],
+    hpScale: [6.2, 6.6],
     icon: "🌿",
   },
   {
@@ -105,7 +105,7 @@ export const STAGES = [
     blurb: "Every corridor doubles back. Something is counting your turns.",
     kit: "labyrinth",
     themes: ["knossos", "labyrinth", "bronze"],
-    hpScale: [5.8, 6.0],
+    hpScale: [6.8, 7.4],
     icon: "🐂",
   },
   {
@@ -113,7 +113,7 @@ export const STAGES = [
     blurb: "The dead are many, and they are no longer resting.",
     kit: "hades",
     themes: ["asphodel", "erebos", "styx"],
-    hpScale: [6.2, 7.7],
+    hpScale: [7.6, 8.6],
     icon: "💀",
   },
   {
@@ -121,7 +121,7 @@ export const STAGES = [
     blurb: "What the gods buried is climbing back up the mountain.",
     kit: "olympus",
     themes: ["othrys", "olympus", "aither"],
-    hpScale: [7.2, 7.8],
+    hpScale: [8.8, 10.1],
     icon: "⚡",
   },
 ];
