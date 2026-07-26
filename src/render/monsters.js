@@ -16,6 +16,7 @@ import { ctx, groundShadow, shadedSphere, shadedEllipse } from "./canvas.js";
 
 // which way is this creep headed? (for lean/facing; 0 when moving vertically)
 function pathDirX(e) {
+  if (!PATH.length) return 0;      // drawn outside a level, e.g. in the guide
   const ahead = pointAtDistance(PATH, PATH_LEN, Math.min(e.dist + 4, PATH_LEN));
   const dx = ahead.x - e.x;
   return Math.abs(dx) < 0.3 ? 0 : Math.sign(dx);
@@ -300,9 +301,31 @@ function crestWisp(x, y, r, _colors) {
   ctx.fill();
 }
 
+// A laurel wreath — the mark of the warded, who are consecrated rather than
+// armoured.
+function crestWreath(x, y, r, _colors) {
+  ctx.strokeStyle = "#5f9a4a";
+  ctx.lineWidth = Math.max(1.4, r * 0.13);
+  ctx.lineCap = "round";
+  for (const s of [-1, 1]) {
+    ctx.beginPath();
+    ctx.arc(x, y - r * 0.15, r * 0.85, s > 0 ? -1.5 : Math.PI + 0.3,
+            s > 0 ? -0.15 : Math.PI + 1.65);
+    ctx.stroke();
+    for (let i = 0; i < 3; i++) {                 // leaves
+      const a = (s > 0 ? -1.3 + i * 0.4 : Math.PI + 0.5 + i * 0.4);
+      const lx = x + Math.cos(a) * r * 0.85, ly = y - r * 0.15 + Math.sin(a) * r * 0.85;
+      ctx.fillStyle = i % 2 ? "#8fc46a" : "#4f8a3c";
+      ctx.beginPath();
+      ctx.ellipse(lx, ly, r * 0.2, r * 0.1, a, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
 const CRESTS = {
   plume: crestPlume, horns: crestHorns, snakes: crestSnakes,
-  crown: crestCrown, wisp: crestWisp,
+  crown: crestCrown, wisp: crestWisp, wreath: crestWreath,
 };
 
 // ------------------------------------------------------------- carried gear
@@ -380,8 +403,42 @@ function carryScythe(e, x, y, r) {
   ctx.stroke();
 }
 
+// A raised torch — a priest's implement, and a bright point that reads at
+// small size.
+function carryTorch(e, x, y, r) {
+  const flick = 0.6 + 0.4 * Math.sin(performance.now() / 90 + x);
+  ctx.strokeStyle = "#6b4a24";
+  ctx.lineWidth = Math.max(1.5, r * 0.09);
+  ctx.beginPath();
+  ctx.moveTo(x + r * 0.72, y + r * 0.5);
+  ctx.lineTo(x + r * 0.9, y - r * 0.75);
+  ctx.stroke();
+  const g = ctx.createRadialGradient(x + r * 0.9, y - r, 0, x + r * 0.9, y - r, r * 0.7 * flick);
+  g.addColorStop(0, "rgba(255,225,150,0.95)");
+  g.addColorStop(1, "rgba(255,150,40,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath();
+  ctx.arc(x + r * 0.9, y - r, r * 0.7 * flick, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// A cradled urn — what a brood carries its young in.
+function carryUrn(e, x, y, r) {
+  ctx.fillStyle = "#8a4a24";
+  ctx.beginPath();
+  ctx.moveTo(x + r * 0.55, y + r * 0.45);
+  ctx.quadraticCurveTo(x + r * 0.3, y - r * 0.1, x + r * 0.6, y - r * 0.5);
+  ctx.quadraticCurveTo(x + r * 1.1, y - r * 0.1, x + r * 0.9, y + r * 0.45);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(30,14,6,0.6)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+}
+
 const CARRIES = {
-  spearShield: carrySpearShield, club: carryClub, bow: carryBow, scythe: carryScythe,
+  spearShield: carrySpearShield, club: carryClub, bow: carryBow,
+  scythe: carryScythe, torch: carryTorch, urn: carryUrn,
 };
 
 // ------------------------------------------------------------------- auras
@@ -419,7 +476,38 @@ function auraStorm(x, y, r) {
   }
 }
 
-const AURAS = { flame: auraFlame, spectral: auraSpectral, storm: auraStorm };
+// A hexagonal shimmer — the visible sign that sorcery slides off this one.
+function auraWard(x, y, r) {
+  const t = performance.now() / 700;
+  ctx.strokeStyle = `rgba(150,220,255,${0.35 + 0.2 * Math.sin(t * 3)})`;
+  ctx.lineWidth = Math.max(1, r * 0.08);
+  ctx.beginPath();
+  for (let i = 0; i <= 6; i++) {
+    const a = t + (i / 6) * Math.PI * 2;
+    const px = x + Math.cos(a) * r * 1.3, py = y + Math.sin(a) * r * 1.3;
+    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+}
+
+// Green motes drifting upward — something is putting itself back together.
+function auraRegen(x, y, r) {
+  const t = performance.now() / 420;
+  for (let i = 0; i < 4; i++) {
+    const ph = (t + i * 0.25) % 1;
+    const px = x + Math.sin((i * 2.1) + t * 2) * r * 0.7;
+    const py = y + r * 0.6 - ph * r * 1.9;
+    ctx.fillStyle = `rgba(120,240,160,${0.55 * (1 - ph)})`;
+    ctx.beginPath();
+    ctx.arc(px, py, r * 0.13, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+const AURAS = {
+  flame: auraFlame, spectral: auraSpectral, storm: auraStorm,
+  ward: auraWard, regen: auraRegen,
+};
 
 // ------------------------------------------------------------------- entry
 export function drawEnemy(e) {
@@ -467,7 +555,10 @@ export function drawEnemy(e) {
 
   if (e.burning) drawBurning(e.x, cy, r);
 
-  // hp bar (width scales with size; sits above horns/crests)
+  // hp bar (width scales with size; sits above horns/crests). The Field Guide
+  // draws creatures as reference art rather than as live creeps, so it opts
+  // out — a full green bar over every bestiary tile is pure clutter.
+  if (e.hideHpBar) return;
   const w = Math.max(24, r * 2), h = e.boss ? 6 : 4;
   const barY = cy - r * (e.boss ? 1.75 : 1.45) - 8;
   const pct = Math.max(0, e.hp / e.maxHp);

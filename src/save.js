@@ -10,6 +10,7 @@
 import { LEVELS } from "./data/levels.js";
 import { DIFFICULTIES } from "./data/difficulties.js";
 import { HEROES, DEFAULT_HERO } from "./data/hero.js";
+import { UNLOCK_ALL } from "./devFlags.js";
 
 // Outside a browser there is no localStorage; an in-memory stand-in keeps
 // every read/write below working unchanged (and un-persisted, which is what
@@ -158,6 +159,11 @@ export function deleteSlot(i) {
     progress = defaultProgress();
   }
 }
+
+// How many levels the map should offer. Reads the dev flag here rather than
+// forcing progress.unlocked, so nothing is written and a save keeps its real
+// progress when the flag goes away.
+export const levelsUnlocked = () => (UNLOCK_ALL ? LEVELS.length : progress.unlocked);
 
 export function getDifficulty() {
   return DIFFICULTIES[progress.difficulty] || DIFFICULTIES.normal;

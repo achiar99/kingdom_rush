@@ -7,12 +7,16 @@ import {
   towerDamageMul, splashRadiusMul, soldierHpMul, soldierDamageMul, summonHpMul,
   towerRangeMul, towerFireRateMul, heroPowerMul, sellRefundBonus,
 } from "./data/store.js";
-import { nearestPointOnPath } from "./geometry.js";
+import { nearestPointOnPath, pointAtDistance, pathLength } from "./geometry.js";
 import { state, PATH, KIT } from "./state.js";
 
+// Armour blunts steel; a ward blunts sorcery. Keeping them as two separate
+// resistances is what stops any single tower being the answer to everything —
+// the Oracle walks through armour, and walks straight into a ward.
 export function damageEnemy(e, dmg, isMagic) {
   if (e.dead) return;
-  if (!isMagic && e.armor) dmg *= 1 - e.armor; // armor resists non-magic damage
+  if (isMagic) { if (e.magicResist) dmg *= 1 - e.magicResist; }
+  else if (e.armor) dmg *= 1 - e.armor;
   e.hp -= dmg;
   if (e.hp <= 0) { e.dead = true; state.gold += e.reward; }
 }
@@ -20,15 +24,22 @@ export function damageEnemy(e, dmg, isMagic) {
 // entry: { type, hpMul, speedMul } — a single queued spawn. `type` is a ROLE
 // ("swift", "brute", …); the active stage's kit decides which creature shows
 // up to play it.
-export function makeEnemy(entry) {
+export function makeEnemy(entry, dist = 0) {
   const d = KIT[entry.type];
   const hp = d.hp * entry.hpMul;
+  const p = dist > 0 ? pointAtDistance(PATH, pathLength(PATH), dist) : PATH[0];
   return {
-    type: entry.type, def: d, dist: 0,
+    type: entry.type, def: d, dist,
     speed: d.speed * entry.speedMul,
     maxHp: hp, hp, reward: d.reward, radius: d.radius,
     armor: d.armor, flying: d.flying, boss: !!d.boss, colors: d.colors,
-    x: PATH[0].x, y: PATH[0].y,
+    // role mechanics — absent on most creatures, which is why they're read
+    // with `|| 0` everywhere rather than assumed present
+    magicResist: d.magicResist || 0,
+    regen: (d.regen || 0) * entry.hpMul,   // scales with the wave, like HP
+    splits: d.splits || 0,
+    hpMul: entry.hpMul, speedMul: entry.speedMul,   // so a brood can seed its young
+    x: p.x, y: p.y,
     dead: false, engaged: false, attackCd: 0,
   };
 }

@@ -27,22 +27,32 @@ function rng(seed) {
 // When each role first appears, as a fraction of the way through a stage.
 // Stage 1 has to teach the whole vocabulary, so it introduces roles slowly;
 // later stages assume you know what a brute is and field them immediately.
-const INTRO_FIRST_STAGE = { swarm: 0, swift: 0.1, shielded: 0.2, winged: 0.3, brute: 0.45, champion: 0.7 };
+const INTRO_FIRST_STAGE = {
+  swarm: 0, swift: 0.1, shielded: 0.2, winged: 0.3, brute: 0.45,
+  warded: 0.55, brood: 0.62, revenant: 0.72, stormborn: 0.8, champion: 0.7,
+};
 // Later stages field everything from their first level — including champions.
 // Holding champions back to the middle of a stage put a cliff there: the
 // balance fitter needed a *lower* hpScale for a stage's last level than its
 // first to compensate, which is nonsense to read and impossible to tune.
-const INTRO_LATER = { swarm: 0, swift: 0, shielded: 0, winged: 0, brute: 0, champion: 0 };
+const INTRO_LATER = {
+  swarm: 0, swift: 0, shielded: 0, winged: 0, brute: 0,
+  warded: 0, stormborn: 0, brood: 0, revenant: 0, champion: 0,
+};
 
 // Spawn gap and squad size per role — a runner rush is twenty creeps a third
 // of a second apart; brutes come in threes with a long beat between them.
 const SHAPE = {
-  swarm:    { gap: [0.9, 0.5], count: [6, 12] },
-  swift:    { gap: [0.42, 0.24], count: [6, 16] },
-  shielded: { gap: [0.8, 0.45], count: [4, 10] },
-  brute:    { gap: [1.5, 0.85], count: [2, 6] },
-  winged:   { gap: [0.7, 0.36], count: [4, 12] },
-  champion: { gap: [3.0, 1.6], count: [1, 3] },
+  swarm:     { gap: [0.9, 0.5],   count: [6, 12] },
+  swift:     { gap: [0.42, 0.24], count: [6, 16] },
+  shielded:  { gap: [0.8, 0.45],  count: [4, 10] },
+  brute:     { gap: [1.5, 0.85],  count: [2, 6] },
+  winged:    { gap: [0.7, 0.36],  count: [4, 12] },
+  warded:    { gap: [0.85, 0.5],  count: [4, 9] },
+  stormborn: { gap: [0.95, 0.55], count: [3, 7] },
+  brood:     { gap: [1.0, 0.6],   count: [3, 7] },   // each becomes three
+  revenant:  { gap: [1.1, 0.7],   count: [2, 6] },
+  champion:  { gap: [3.0, 1.6],   count: [1, 3] },
 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -75,16 +85,25 @@ function availableRoles(stageIndex, levelInStage) {
 // Weighing by HP alone is what let two neighbouring levels measure 100% and
 // 0%: one had 48 swift creeps and the other 93, which looked near-identical
 // by HP and was nothing of the kind in play.
+// Mirrors BASE in enemyKits.js. `effective` is a hand-set multiplier for the
+// work a role costs beyond its raw numbers: a brood is really three bodies, a
+// revenant has to be killed faster than it heals, and a ward or armour means
+// half your board is shooting at reduced value whatever you built.
 const ROLE = {
-  swarm:    { hp: 45,   speed: 55,  armor: 0 },
-  swift:    { hp: 26,   speed: 108, armor: 0 },
-  shielded: { hp: 70,   speed: 48,  armor: 0.55 },
-  brute:    { hp: 190,  speed: 34,  armor: 0.2 },
-  winged:   { hp: 52,   speed: 74,  armor: 0 },
-  champion: { hp: 1100, speed: 26,  armor: 0.35 },
+  swarm:     { hp: 45,   speed: 55,  armor: 0,    effective: 1 },
+  swift:     { hp: 26,   speed: 108, armor: 0,    effective: 1 },
+  shielded:  { hp: 70,   speed: 48,  armor: 0.55, effective: 1 },
+  brute:     { hp: 190,  speed: 34,  armor: 0.2,  effective: 1 },
+  winged:    { hp: 52,   speed: 74,  armor: 0,    effective: 1.15 },
+  warded:    { hp: 88,   speed: 50,  armor: 0,    effective: 1.5 },
+  stormborn: { hp: 78,   speed: 66,  armor: 0.4,  effective: 1.3 },
+  brood:     { hp: 84,   speed: 46,  armor: 0.1,  effective: 1.9 },
+  revenant:  { hp: 120,  speed: 42,  armor: 0.15, effective: 1.4 },
+  champion:  { hp: 1100, speed: 26,  armor: 0.35, effective: 1 },
 };
 const BASE_SPEED = 55;
-const roleWeight = (r) => (ROLE[r].hp * (ROLE[r].speed / BASE_SPEED)) / (1 - ROLE[r].armor);
+const roleWeight = (r) =>
+  (ROLE[r].hp * (ROLE[r].speed / BASE_SPEED) * ROLE[r].effective) / (1 - ROLE[r].armor);
 
 const waveWeight = (w) =>
   w.groups.reduce((a, g) => a + g.count * roleWeight(g.type), 0) * w.hpMul;

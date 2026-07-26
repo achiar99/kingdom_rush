@@ -13,6 +13,7 @@
 // Levels past the end of the array allow everything — the full arsenal has
 // been earned by then.
 import { MAX_LEVEL } from "../config.js";
+import { UNLOCK_ALL } from "../devFlags.js";
 import { TOWER_TYPES } from "./towerTypes.js";
 
 // The first five levels of Stage I are the tutorial arc: one new thing each.
@@ -53,7 +54,8 @@ const EVERYTHING = {
   abilities: { soldiers: 1, fire: 1 },
 };
 
-export const unlocksFor = (levelIndex) => UNLOCKS[levelIndex] || EVERYTHING;
+export const unlocksFor = (levelIndex) =>
+  UNLOCK_ALL ? EVERYTHING : (UNLOCKS[levelIndex] || EVERYTHING);
 
 // The wave the player is currently preparing (between waves) or fighting —
 // the 1-based yardstick every unlock is measured against.

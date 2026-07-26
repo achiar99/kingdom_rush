@@ -5,7 +5,22 @@
 // radial-gradient shading + soft ground shadows + top highlights make towers
 // and creeps read as rounded volumes lit from the upper-left.
 export const canvas = document.getElementById("game");
-export const ctx = canvas.getContext("2d");
+
+// `ctx` is a live binding, not a constant, so it can be pointed at a different
+// surface for a moment. The Field Guide uses this to draw real towers and
+// creatures into little thumbnail canvases with the same code that draws them
+// on the battlefield — the alternative was a second set of drawings for the
+// guide, which would drift out of step the day after it was written.
+export let ctx = canvas.getContext("2d");
+
+// Run `fn` with every render module drawing into `target` instead. Restores
+// the battlefield context afterwards even if `fn` throws.
+export function withCanvas(target, fn) {
+  const previous = ctx;
+  ctx = target;
+  try { return fn(); }
+  finally { ctx = previous; }
+}
 
 export const LIGHT = { x: -0.5, y: -0.6 }; // light direction (upper-left)
 

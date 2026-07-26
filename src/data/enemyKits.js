@@ -7,9 +7,24 @@
 // wave maths behind both. Adding a stage means adding a kit, not touching
 // a single wave.
 //
-// The six roles are the tactical vocabulary of the whole game — each one is
-// the answer to a different tower, and every kit fields all six:
-export const ROLES = ["swarm", "swift", "shielded", "brute", "winged", "champion"];
+// The ten roles are the tactical vocabulary of the whole game. Each one asks a
+// different question of your board, and every kit fields all ten:
+//
+//   swarm      the rank and file
+//   swift      fast and fragile — little time under fire
+//   shielded   heavy armour — the Oracle ignores it, nothing else does
+//   brute      slow and very tough
+//   winged     flies — the Phalanx and the Catapult cannot touch it
+//   champion   the headline act
+//   warded     resists MAGIC instead of steel — the counter to an all-Oracle
+//              board, which was otherwise strictly the best thing to build
+//   stormborn  armoured AND flying: only the Oracle answers it cleanly
+//   brood      splits into two swarm when it dies — punishes pure splash
+//   revenant   heals itself unless it is burning
+export const ROLES = [
+  "swarm", "swift", "shielded", "brute", "winged",
+  "warded", "stormborn", "brood", "revenant", "champion",
+];
 
 // `art` is a recipe, not a drawing — see render/monsters.js, which assembles
 // a figure from these switches. Keeping it declarative is what lets five
@@ -30,6 +45,18 @@ const BASE = {
   shielded:  { radius: 12, hp: 70,   speed: 48,  reward: 18, armor: 0.55, flying: false },
   brute:     { radius: 18, hp: 190,  speed: 34,  reward: 28, armor: 0.2,  flying: false },
   winged:    { radius: 11, hp: 52,   speed: 74,  reward: 16, armor: 0,    flying: true  },
+  // Mirror image of `shielded`: steel goes straight through it, sorcery does
+  // not. Without this the Oracle had no bad matchup and outclassed everything.
+  warded:    { radius: 12, hp: 88,   speed: 50,  reward: 20, armor: 0,    flying: false, magicResist: 0.6 },
+  // Armoured and airborne: the Phalanx can't block it, the Catapult can't
+  // shoot it, and armour blunts the Toxotai. The Oracle is the clean answer.
+  stormborn: { radius: 12, hp: 78,   speed: 66,  reward: 24, armor: 0.4,  flying: true  },
+  // Dies into two swarm. A board that leans entirely on splash finds the
+  // wave getting bigger rather than smaller.
+  brood:     { radius: 14, hp: 84,   speed: 46,  reward: 16, armor: 0.1,  flying: false, splits: 2 },
+  // Claws its health back unless something is burning it — rewards Ignite and
+  // the Shrine of Hekate, punishes slow chip damage.
+  revenant:  { radius: 13, hp: 120,  speed: 42,  reward: 22, armor: 0.15, flying: false, regen: 14 },
   champion:  { radius: 26, hp: 1100, speed: 26,  reward: 160, armor: 0.35, flying: false, boss: true },
 };
 
@@ -56,6 +83,18 @@ export const ENEMY_KITS = {
     winged: creature("winged", "Storm Eagle",
       { light: "#e8dcc0", mid: "#9c7c48", dark: "#4f3c1c" },
       { frame: "avian" }),
+    warded: creature("warded", "Priest of Apollo",
+      { light: "#f0e4c8", mid: "#c8a860", dark: "#7a6428" },
+      { frame: "biped", crest: "wreath", carry: "torch", aura: "ward" }),
+    stormborn: creature("stormborn", "Bronze Harpy-Rider",
+      { light: "#e0c88a", mid: "#a8823a", dark: "#5c4414" },
+      { frame: "avian", crest: "plume" }),
+    brood: creature("brood", "Spartoi Sower",
+      { light: "#cbb896", mid: "#8a7048", dark: "#4a3a20" },
+      { frame: "biped", crest: "horns", carry: "urn" }),
+    revenant: creature("revenant", "Myrmidon Shade",
+      { light: "#d8ccb0", mid: "#948060", dark: "#4e4028" },
+      { frame: "biped", carry: "spearShield", aura: "regen" }),
     champion: creature("champion", "Champion of Ilion",
       { light: "#ffcf8a", mid: "#c0392b", dark: "#5e160c" },
       { frame: "biped", crest: "plume", carry: "spearShield", scale: 1.05 }),
@@ -78,6 +117,18 @@ export const ENEMY_KITS = {
     winged: creature("winged", "Harpy",
       { light: "#d8c9a8", mid: "#94794c", dark: "#4a3a20" },
       { frame: "avian", crest: "horns" }),
+    warded: creature("warded", "Dryad",
+      { light: "#c8e0a0", mid: "#6f9a4a", dark: "#33521f" },
+      { frame: "biped", crest: "wreath", aura: "ward" }),
+    stormborn: creature("stormborn", "Bronze-Feathered Roc",
+      { light: "#dcc890", mid: "#9c7c3c", dark: "#523c14" },
+      { frame: "avian", crest: "horns" }),
+    brood: creature("brood", "Hydra Hatchling",
+      { light: "#a0d8c0", mid: "#3f8f78", dark: "#1d4a3c" },
+      { frame: "serpent", crest: "snakes" }),
+    revenant: creature("revenant", "Antaeus Spawn",
+      { light: "#c8b090", mid: "#8a6a3c", dark: "#4a3418" },
+      { frame: "biped", carry: "club", aura: "regen" }),
     champion: creature("champion", "Nemean Lion",
       { light: "#f0c878", mid: "#b8842c", dark: "#61410c" },
       { frame: "quadruped", crest: "crown", scale: 1.1 }),
@@ -100,6 +151,18 @@ export const ENEMY_KITS = {
     winged: creature("winged", "Stymphalian Bird",
       { light: "#cdd6e2", mid: "#7a8698", dark: "#3d4654" },
       { frame: "avian" }),
+    warded: creature("warded", "Gorgon Acolyte",
+      { light: "#b8e0b0", mid: "#5f9a62", dark: "#2a4f2c" },
+      { frame: "biped", crest: "snakes", aura: "ward" }),
+    stormborn: creature("stormborn", "Bronze Griffin",
+      { light: "#e8d8a0", mid: "#b0903c", dark: "#5e4a14" },
+      { frame: "avian", crest: "plume" }),
+    brood: creature("brood", "Serpent Brood-Mother",
+      { light: "#a8d8a0", mid: "#4f8f52", dark: "#234a26" },
+      { frame: "serpent", crest: "horns" }),
+    revenant: creature("revenant", "Stone-Knit Golem",
+      { light: "#cfc8b8", mid: "#8a8272", dark: "#4a453a" },
+      { frame: "colossus", aura: "regen" }),
     champion: creature("champion", "The Minotaur",
       { light: "#c08a5a", mid: "#7a4520", dark: "#3e2008" },
       { frame: "biped", crest: "horns", carry: "club", scale: 1.1 }),
@@ -122,6 +185,18 @@ export const ENEMY_KITS = {
     winged: creature("winged", "Ker",
       { light: "#e0c0d0", mid: "#96547a", dark: "#4a2038" },
       { frame: "avian", aura: "spectral" }),
+    warded: creature("warded", "Charon's Herald",
+      { light: "#cfe0f0", mid: "#7288a8", dark: "#33415c" },
+      { frame: "biped", crest: "wisp", carry: "torch", aura: "ward" }),
+    stormborn: creature("stormborn", "Erinys",
+      { light: "#e8c0d8", mid: "#a05888", dark: "#4e2040" },
+      { frame: "avian", crest: "snakes" }),
+    brood: creature("brood", "Bone Pile",
+      { light: "#efe8d2", mid: "#b0a68a", dark: "#5e5744" },
+      { frame: "biped", crest: "horns" }),
+    revenant: creature("revenant", "Undying Hoplite",
+      { light: "#e0d8c0", mid: "#94886a", dark: "#4e4632" },
+      { frame: "biped", crest: "plume", carry: "spearShield", aura: "regen" }),
     champion: creature("champion", "Charon",
       { light: "#9fb4c8", mid: "#4d6076", dark: "#1e2a38" },
       { frame: "biped", crest: "wisp", carry: "scythe", aura: "spectral", scale: 1.05 }),
@@ -144,11 +219,66 @@ export const ENEMY_KITS = {
     winged: creature("winged", "Storm Eidolon",
       { light: "#e8f4ff", mid: "#7ab8e8", dark: "#2a5c84" },
       { frame: "avian", aura: "storm" }),
+    warded: creature("warded", "Aegis Bearer",
+      { light: "#ffeab0", mid: "#c8a840", dark: "#6e5a14" },
+      { frame: "biped", crest: "wreath", carry: "spearShield", aura: "ward" }),
+    stormborn: creature("stormborn", "Thunder Roc",
+      { light: "#e8f4ff", mid: "#7ab0e8", dark: "#2a5490" },
+      { frame: "avian", crest: "horns", aura: "storm" }),
+    brood: creature("brood", "Gigante Seed",
+      { light: "#c8b8e0", mid: "#7a68a8", dark: "#3a2e58" },
+      { frame: "biped", carry: "urn" }),
+    revenant: creature("revenant", "Reforged Talos",
+      { light: "#ffe6a8", mid: "#c89a34", dark: "#6e5210" },
+      { frame: "colossus", aura: "regen" }),
     champion: creature("champion", "Typhon",
       { light: "#ffb0a0", mid: "#b8402c", dark: "#5c1408" },
       { frame: "serpent", crest: "snakes", aura: "flame", scale: 1.2 }),
   }),
 };
+
+// ------------------------------------------------------------- stage masters
+// One named figure per stage, and it appears exactly once in the whole
+// campaign: the final wave of that stage's tenth level.
+//
+// Deliberately NOT a member of ROLES. Roles are the vocabulary the wave
+// generator shuffles freely, and a master that could turn up in wave 3 of a
+// mid-stage level would stop being an event. data/waves.js appends it by hand
+// to the one wave that earns it.
+//
+// It resists armour-piercing AND armour-blunting: 40% armour with a 20% ward,
+// so neither an all-Oracle nor an all-Toxotai board walks through it. The
+// answer is a board that does two things well.
+const master = (name, colors, art, tweaks = {}) => ({
+  role: "master", name, colors,
+  art: { frame: "biped", crest: "crown", carry: "none", aura: "none", scale: 1.35, ...art },
+  radius: 34, hp: 4200, speed: 22, reward: 500,
+  armor: 0.4, magicResist: 0.2, flying: false, boss: true,
+  ...tweaks,
+});
+
+export const MASTERS = {
+  troy: master("Hector, Breaker of Ships",
+    { light: "#ffd9a0", mid: "#b8452e", dark: "#5a1408" },
+    { frame: "biped", crest: "plume", carry: "spearShield" }),
+  arcadia: master("Lykaon, the Wolf-King",
+    { light: "#d8cbb0", mid: "#8a7a58", dark: "#443a26" },
+    { frame: "quadruped", crest: "crown", aura: "regen" }),
+  labyrinth: master("The Chimera",
+    { light: "#ffc078", mid: "#c05a20", dark: "#5e2408" },
+    { frame: "quadruped", crest: "snakes", aura: "flame" }),
+  hades: master("Thanatos, Bringer of Death",
+    { light: "#cfd8e8", mid: "#5c6a88", dark: "#232c40" },
+    { frame: "biped", crest: "wisp", carry: "scythe", aura: "spectral" }),
+  olympus: master("Kronos, Father of Titans",
+    { light: "#ffe6a8", mid: "#b88a2c", dark: "#5a3c08" },
+    { frame: "colossus", crest: "crown", carry: "scythe", aura: "storm", scale: 1.5 },
+    { hp: 5600, radius: 38 }),
+};
+
+// Folded into each kit under the key "master", so makeEnemy's KIT[type] lookup
+// finds it the same way it finds every other creature.
+for (const [kitId, m] of Object.entries(MASTERS)) ENEMY_KITS[kitId].creatures.master = m;
 
 export const KIT_LIST = Object.keys(ENEMY_KITS);
 

@@ -12,6 +12,7 @@
 // Imports `progress` from save.js at call time only (safe circularity — see
 // simulation.js for why that's fine in this codebase).
 import { progress } from "../save.js";
+import { UNLOCK_ALL } from "../devFlags.js";
 
 export const MAX_RANK = 5;
 export const RANK_COSTS = [1, 2, 3, 4, 5]; // 15 stars to max a single track
@@ -46,7 +47,11 @@ export const TRACKS = [
     colors: ["#c8d0e8", "#3c4870"] },
 ];
 
-export const rankOf = (key) => (progress.upgrades && progress.upgrades[key]) || 0;
+// With UNLOCK_ALL every track reads as maxed. Deliberately a read-time
+// override rather than a write into progress.upgrades — switching the flag
+// off has to leave the save untouched.
+export const rankOf = (key) =>
+  UNLOCK_ALL ? MAX_RANK : ((progress.upgrades && progress.upgrades[key]) || 0);
 
 const costOfRanks = (rank) => {
   let sum = 0;

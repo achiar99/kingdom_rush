@@ -87,9 +87,13 @@ export const STAGES = [
     blurb: "Ten years of war, and the walls still stand.",
     kit: "troy",
     themes: ["ilion", "troad", "aegean"],
-    // The stage's difficulty, as [first level, last level]. The eight levels
-    // between interpolate. This is the only difficulty number a stage owns.
-    hpScale: [1.0, 6.0],
+    // The stage's difficulty, as [first level, last level]; the eight levels
+    // between interpolate. These come from tools/sim/fit-stages.js and are
+    // deliberately NOT monotonic across the campaign — a later stage can want
+    // a lower hpScale because it fields more waves and every role from its
+    // first level. Forcing them to rise "because Titans should be tougher
+    // than a Minotaur" put the last ten levels at a 0% win rate.
+    hpScale: [1.0, 3.9],
     icon: "🛡️",
   },
   {
@@ -97,7 +101,7 @@ export const STAGES = [
     blurb: "Past the last olive terrace, older things are still awake.",
     kit: "arcadia",
     themes: ["olive", "arkadia", "alpheios"],
-    hpScale: [6.2, 6.6],
+    hpScale: [3.2, 7.2],
     icon: "🌿",
   },
   {
@@ -105,7 +109,7 @@ export const STAGES = [
     blurb: "Every corridor doubles back. Something is counting your turns.",
     kit: "labyrinth",
     themes: ["knossos", "labyrinth", "bronze"],
-    hpScale: [6.8, 7.4],
+    hpScale: [7.5, 6.0],
     icon: "🐂",
   },
   {
@@ -113,7 +117,7 @@ export const STAGES = [
     blurb: "The dead are many, and they are no longer resting.",
     kit: "hades",
     themes: ["asphodel", "erebos", "styx"],
-    hpScale: [7.6, 8.6],
+    hpScale: [6.4, 8.8],
     icon: "💀",
   },
   {
@@ -121,7 +125,7 @@ export const STAGES = [
     blurb: "What the gods buried is climbing back up the mountain.",
     kit: "olympus",
     themes: ["othrys", "olympus", "aither"],
-    hpScale: [8.8, 10.1],
+    hpScale: [3.9, 6.3],
     icon: "⚡",
   },
 ];

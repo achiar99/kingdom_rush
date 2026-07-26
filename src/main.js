@@ -4,12 +4,14 @@
 import "./ui.js";
 import "./store.js";
 import "./heroPicker.js";
+import "./guide.js";
 import { state, LEVEL } from "./state.js";
 import { update } from "./simulation.js";
 import { render } from "./render.js";
 import { showMap } from "./worldmap.js";
 import { showSlotSelect } from "./slots.js";
 import { getActiveSlot, loadActiveSlotSilently, syncFromDisk } from "./save.js";
+import { UNLOCK_ALL } from "./devFlags.js";
 
 let last = performance.now();
 function loop(now) {
@@ -26,6 +28,12 @@ function loop(now) {
 // boot: first pull any newer save-slot-N.json files from disk (auto-save's
 // durable copy), then resume straight into the last-used slot's map, or show
 // slot-select on a first-ever visit (or after all slots have been forgotten).
+// A cheat flag you can't see is a debugging trap — say so on screen.
+if (UNLOCK_ALL) {
+  document.getElementById("devBadge").hidden = false;
+  document.title = "🔓 " + document.title;
+}
+
 (async () => {
   await syncFromDisk();
   const lastSlot = getActiveSlot();

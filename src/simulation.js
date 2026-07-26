@@ -157,6 +157,14 @@ export function update(dt) {
     if (e.burnFor <= 0) e.burning = false;
   }
 
+  // Revenants knit themselves back together — but only while nothing is
+  // burning them, which is what makes Ignite and the Shrine of Hekate the
+  // answer to them rather than raw damage.
+  for (const e of state.enemies) {
+    if (e.dead || !e.regen || e.burning) continue;
+    if (e.hp < e.maxHp) e.hp = Math.min(e.maxHp, e.hp + e.regen * dt);
+  }
+
   // crippling effects wear off
   for (const e of state.enemies) {
     if (!e.slowFor) continue;
@@ -225,6 +233,23 @@ export function update(dt) {
   // explosion / hit effects fade out
   for (const fx of state.effects) fx.life -= dt;
   
+  // A brood that dies seeds two swarm where it fell. Done here rather than in
+  // damageEnemy so the list isn't mutated while something is iterating it —
+  // and the young start slightly BEHIND the parent so a brood killed on the
+  // castle steps can't dump two free leaks over the line.
+  const spawned = [];
+  for (const e of state.enemies) {
+    if (!e.dead || !e.splits || e.spawnedYoung) continue;
+    e.spawnedYoung = true;
+    for (let i = 0; i < e.splits; i++) {
+      const back = 14 + i * 12;
+      spawned.push(makeEnemy(
+        { type: "swarm", gap: 0, hpMul: e.hpMul * 0.55, speedMul: e.speedMul },
+        Math.max(0, e.dist - back)));
+    }
+  }
+  if (spawned.length) state.enemies.push(...spawned);
+
   // cull dead entities
   state.enemies = state.enemies.filter((e) => !e.dead);
   state.projectiles = state.projectiles.filter((p) => !p.dead);

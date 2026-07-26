@@ -12,7 +12,7 @@
 import { LEVELS, STAGES, THEMES, LEVELS_PER_STAGE, levelsInStage } from "./data/levels.js";
 import { el, setView } from "./dom.js";
 import { state, loadLevel } from "./state.js";
-import { progress, getStars } from "./save.js";
+import { progress, getStars, levelsUnlocked } from "./save.js";
 import { closeMenus, resetGame } from "./ui.js";
 import { refreshStoreButton } from "./store.js";
 import { refreshHeroPickButton } from "./heroPicker.js";
@@ -51,7 +51,7 @@ function stageStats(stageIndex) {
   const done = levels.filter((lv) => progress.done.includes(lv.id)).length;
   const stars = levels.reduce((a, lv) => a + getStars(lv.id), 0);
   // A stage opens once any of its levels has been unlocked.
-  const unlocked = stageIndex * LEVELS_PER_STAGE < progress.unlocked;
+  const unlocked = stageIndex * LEVELS_PER_STAGE < levelsUnlocked();
   return { levels, done, stars, unlocked, maxStars: levels.length * 3 };
 }
 
@@ -124,7 +124,7 @@ function renderStage(stageIndex) {
   const nodes = el("mapNodes");
   nodes.innerHTML = "";
   levels.forEach((lv) => {
-    const unlocked = lv.index < progress.unlocked;
+    const unlocked = lv.index < levelsUnlocked();
     const done = progress.done.includes(lv.id);
     const stars = getStars(lv.id);
     const btn = document.createElement("button");
