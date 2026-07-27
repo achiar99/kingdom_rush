@@ -63,7 +63,9 @@ function paintOne(g, w, h, kind, key, extra) {
     // times a Ballista. Scaling them all by the tallest left the artillery
     // tiles looking half empty, so each type is normalised to its own drawn
     // height. Keep these roughly in step with render/towers.js.
-    const TOWER_H = { archer: 96, artillery: 42, barracks: 62, magic: 74 };
+    // Measured against a level-3 tower, which is what the guide draws. Level 3
+    // is taller than it used to be now that upgrades grow the building.
+    const TOWER_H = { archer: 108, artillery: 66, barracks: 58, magic: 76 };
     place(Math.min(0.95, (h - 8) / (TOWER_H[key] || 80)), h - 6);
     drawTower({ x: 0, y: 0, type: key, level: 3, spec: extra || null,
                 fireRate: 1, cooldown: 0, range: 0, hitsAir: true });

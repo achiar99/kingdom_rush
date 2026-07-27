@@ -179,6 +179,32 @@ function rockBase(x, y, wide) {
   }
 }
 
+// A round stone drum seen slightly from above: a cylinder body with an
+// elliptical cap. The artillery sits on one of these — a siege engine parked on
+// the grass reads as a machine someone left behind, not as a tower you built.
+function stoneDrum(x, baseY, halfW, h, pal = MARBLE) {
+  const topY = baseY - h;
+  ctx.beginPath();                                        // body
+  ctx.moveTo(x - halfW, topY);
+  ctx.lineTo(x - halfW, baseY);
+  ctx.ellipse(x, baseY, halfW, halfW * 0.34, 0, Math.PI, 0, true);
+  ctx.lineTo(x + halfW, topY);
+  ctx.closePath();
+  ctx.fillStyle = vgrad(x, topY, 0, h, pal);
+  ctx.fill();
+  ink(1.9); ctx.stroke();
+  ctx.fillStyle = "rgba(0,0,0,0.14)";                     // inner shade at the foot
+  ctx.beginPath();
+  ctx.ellipse(x, baseY, halfW * 0.9, halfW * 0.26, 0, Math.PI, 0);
+  ctx.fill();
+  ctx.beginPath();                                        // cap
+  ctx.ellipse(x, topY, halfW, halfW * 0.34, 0, 0, Math.PI * 2);
+  ctx.fillStyle = pal.lit;
+  ctx.fill();
+  ink(1.8); ctx.stroke();
+  return topY;
+}
+
 function column(cx, baseY, h, w = 7) {
   const x = cx - w / 2, y = baseY - h;
   ctx.fillStyle = vgrad(x, y, w, h, MARBLE);
@@ -263,51 +289,12 @@ function recoil(t) {
   return Math.max(0, Math.min(1, (t.cooldown || 0) * t.fireRate));
 }
 
-// ------------------------------------------------------------------ Toxotai
-// A tall, narrow watchtower with an open crenellated top — no roof at all, so
-// its outline is a plain vertical bar and can't be confused with the buildings
-// that do have roofs.
-function drawArcherTower(t) {
-  const x = t.x, y = t.y;
-  const tall = t.spec === "amazon";
-  const cretan = t.spec === "cretan";
-  const h = tall ? 58 : 46;
-  const w = 11;                                   // half-width: deliberately slim
-
-  footing(t, 14);
-
-  // Shaft in two stages, the upper slightly inset so the tower tapers.
-  block(x - w, y - h * 0.55, w * 2, h * 0.55 + 5, MARBLE, 4);
-  coursing(x - w, y - h * 0.55, w * 2, h * 0.55 + 5, 3);
-  block(x - w + 1.4, y - h, w * 2 - 2.8, h * 0.45, MARBLE, 3.6);
-  coursing(x - w + 1.4, y - h, w * 2 - 2.8, h * 0.45, 2);
-
-  // Arrow slit — a dark note halfway up that stops the shaft reading blank.
-  shape([[x - 2, y - h * 0.42], [x + 2, y - h * 0.42],
-         [x + 2, y - h * 0.18], [x - 2, y - h * 0.18]], "#2c2318", 1.2);
-
-  // Corbelled gallery that oversails the shaft, gold band under it.
-  shape([[x - w - 5, y - h - 6], [x + w + 5, y - h - 6],
-         [x + w + 5, y - h], [x - w - 5, y - h]], vgrad(0, y - h - 6, 0, 6, MARBLE), 1.8);
-  ctx.fillStyle = GOLD_DARK;
-  ctx.fillRect(x - w - 5, y - h - 1.6, (w + 5) * 2, 1.6);
-
-
-  // Pennant on a staff — the inhabited signal, and it moves.
-  const cloth = cretan ? "#2f6f9a" : tall ? "#b8452e" : "#8a1f3a";
-  ctx.strokeStyle = "#6b4a24";
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(x + w + 4, y - h - 6); ctx.lineTo(x + w + 4, y - h - 26);
-  ctx.stroke();
-  banner(x + w + 8.5, y - h - 25, 9, 8, cloth);
-
-  // The bowman, drawn BEFORE the merlons so the parapet crops his legs and he
-  // reads as standing behind it. Drawn after, at the height needed to clear
-  // the teeth, he floated on top of the wall like an ornament.
-  const ang = aimAngle(t, -h - 8);
+// One archer on a parapet, aiming at whatever the tower is shooting at.
+function bowman(t, px, py, cloth, scale = 1) {
+  const ang = aimAngle(t, py - t.y);
   ctx.save();
-  ctx.translate(x, y - h - 8);
+  ctx.translate(px, py);
+  ctx.scale(scale, scale);
   shape([[-4.6, 4], [-3.4, -2], [3.4, -2], [4.6, 4]], cloth, 1.4);   // cloak
   ctx.fillStyle = "#e8c9a0";                                          // face
   ctx.beginPath();
@@ -334,13 +321,122 @@ function drawArcherTower(t) {
   ctx.moveTo(8.9, -5.7); ctx.lineTo(8.9, 5.7);
   ctx.stroke();
   ctx.restore();
+}
+
+// ------------------------------------------------------------------ Toxotai
+// A tall, narrow watchtower with an open crenellated top — no roof at all, so
+// its outline is a plain vertical bar and can't be confused with the buildings
+// that do have roofs.
+function drawArcherTower(t) {
+  const x = t.x, y = t.y;
+  const tall = t.spec === "amazon";
+  const cretan = t.spec === "cretan";
+  const lvl = t.level || 1;
+  // Each level is a different building, not the same one with a badge on it.
+  // A watchtower's whole identity is height, so that is what grows; the
+  // gallery and the gilding arrive as it does.
+  const h = 32 + (lvl - 1) * 11 + (tall ? 8 : 0);
+  const gallery = lvl >= 2;                       // corbelled oversail + merlons
+  const gilded = lvl >= 3;                        // gold band, pennant, arrow slit
+  const w = 11;                                   // half-width: deliberately slim
+  const cloth = cretan ? "#2f6f9a" : tall ? "#b8452e" : "#8a1f3a";
+
+  footing(t, 14);
+
+  // Shaft. One stage while it's a lookout, two once it's a real tower — the
+  // inset upper stage is what makes it read as tapering rather than extruded.
+  if (gallery) {
+    block(x - w, y - h * 0.55, w * 2, h * 0.55 + 5, MARBLE, 4);
+    coursing(x - w, y - h * 0.55, w * 2, h * 0.55 + 5, 3);
+    block(x - w + 1.4, y - h, w * 2 - 2.8, h * 0.45, MARBLE, 3.6);
+    coursing(x - w + 1.4, y - h, w * 2 - 2.8, h * 0.45, 2);
+  } else {
+    block(x - w, y - h, w * 2, h + 5, MARBLE, 4);
+    coursing(x - w, y - h, w * 2, h + 5, 3);
+  }
+
+  // Arrow slit — a dark note that stops a tall shaft reading blank. A short
+  // one has no room for it.
+  if (gilded) {
+    shape([[x - 2, y - h * 0.42], [x + 2, y - h * 0.42],
+           [x + 2, y - h * 0.18], [x - 2, y - h * 0.18]], "#2c2318", 1.2);
+  }
+
+  // CRETAN ARCHERS: a second, lower fighting gallery with its own merlons and
+  // its own bowman. The path is "more arrows", so the building says so by
+  // being manned twice over.
+  if (cretan) {
+    const my = y - h * 0.5;
+    shape([[x - w - 5, my - 5], [x + w + 5, my - 5],
+           [x + w + 5, my + 1], [x - w - 5, my + 1]],
+      vgrad(0, my - 5, 0, 6, MARBLE), 1.7);
+    for (let i = 0; i < 3; i++) {
+      const mx = x - w - 4.5 + i * 9.6;
+      shape([[mx, my - 5], [mx + 7, my - 5], [mx + 7, my - 10], [mx, my - 10]],
+        MARBLE.lit, 1.3);
+    }
+  }
+
+  // Parapet. At level 1 it's just a capping course; from level 2 it corbels
+  // out over the shaft, which is the loudest single upgrade cue on the tower.
+  const over = gallery ? 5 : 1.5;
+  shape([[x - w - over, y - h - 6], [x + w + over, y - h - 6],
+         [x + w + over, y - h], [x - w - over, y - h]],
+    vgrad(0, y - h - 6, 0, 6, MARBLE), 1.8);
+  if (gilded) {
+    ctx.fillStyle = GOLD_DARK;
+    ctx.fillRect(x - w - over, y - h - 1.6, (w + over) * 2, 1.6);
+  }
+
+  // Pennant on a staff — the inhabited signal, and it moves. Fully upgraded
+  // only, so a maxed tower is obvious across the whole board.
+  if (gilded) {
+    ctx.strokeStyle = "#6b4a24";
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x + w + 4, y - h - 6); ctx.lineTo(x + w + 4, y - h - 26);
+    ctx.stroke();
+    banner(x + w + 8.5, y - h - 25, 9, 8, cloth);
+  }
+
+  // Bowmen, drawn BEFORE the merlons so the parapet crops their legs and they
+  // read as standing behind it. Drawn after, at the height needed to clear the
+  // teeth, they floated on top of the wall like ornaments.
+  bowman(t, x, y - h - 8, cloth, 1);
+  if (cretan) bowman(t, x - 1, y - h * 0.5 - 6, cloth, 0.82);
 
   // Merlons last, so they overlap him. Three wide teeth, not four narrow ones:
   // at four the gaps matched the stone and it stopped reading as crenellation.
-  for (let i = 0; i < 3; i++) {
-    const mx = x - w - 4.5 + i * 9.6;
-    shape([[mx, y - h - 6], [mx + 7, y - h - 6],
-           [mx + 7, y - h - 13], [mx, y - h - 13]], MARBLE.lit, 1.6);
+  // A level-1 lookout has no crenellation at all — that is what you buy.
+  if (gallery && !tall) {
+    for (let i = 0; i < 3; i++) {
+      const mx = x - w - 4.5 + i * 9.6;
+      shape([[mx, y - h - 6], [mx + 7, y - h - 6],
+             [mx + 7, y - h - 13], [mx, y - h - 13]], MARBLE.lit, 1.6);
+    }
+  }
+
+  // AMAZON LONGBOWS: no crenellation at all. An open watch-spire on four posts
+  // under a bronze eagle — the path is reach, so it reads as a lookout rather
+  // than a fighting top, and the eagle marks the one tower that owns the sky.
+  if (tall) {
+    const py = y - h - 6;
+    for (const sx of [-w - 3, -w * 0.34, w * 0.34, w + 3]) {
+      shape([[x + sx - 1.5, py], [x + sx + 1.5, py],
+             [x + sx + 1.2, py - 11], [x + sx - 1.2, py - 11]], MARBLE.lit, 1.2);
+    }
+    shape([[x - w - 6, py - 11], [x + w + 6, py - 11],
+           [x + w + 3, py - 15], [x - w - 3, py - 15]], MARBLE.mid, 1.6);
+    // eagle: a bronze body with two swept wings
+    ctx.fillStyle = GOLD;
+    ctx.beginPath();
+    ctx.ellipse(x, py - 19, 2.6, 3.6, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ink(1.2); ctx.stroke();
+    for (const sgn of [-1, 1]) {
+      shape([[x + sgn * 1.6, py - 21], [x + sgn * 10, py - 25],
+             [x + sgn * 3, py - 17]], GOLD_DARK, 1.1);
+    }
   }
 }
 
@@ -357,65 +453,130 @@ function drawArtilleryTower(t) {
   const scorpion = t.spec === "scorpion";
   const siege = t.spec === "siege";
 
-  rockBase(x, y, 20);
+  const lvl = t.level || 1;
+  // The machine stands on a stone bastion, not on a wheeled carriage. Parked on
+  // the grass it read as a siege train someone abandoned mid-march rather than
+  // as a tower the player built on a footing.
+  //
+  // So this one grows the way the Toxotai does — upward — while keeping the
+  // diagonal throwing arm as its silhouette, which is what separates the two.
+  const drumH = 17 + (lvl - 1) * 6;               // 17 / 23 / 29
+  const hw = siege ? 17 : scorpion ? 13 : 15;     // the bastion's footprint
+  const corbelled = lvl >= 2;                     // stone brackets under the deck
+  const bronzed = lvl >= 3;                       // bronze band, shot, a crewman
 
-  // Timber deck with visible planks and iron straps, all inked. No marble on
-  // this one at all — the material is half of what tells it apart.
-  block(x - 19, y - 5, 38, 13, TIMBER, 4);
-  ctx.strokeStyle = "rgba(30,18,6,0.45)";
-  ctx.lineWidth = 1;
-  for (let i = 1; i < 4; i++) {
+  footing(t, hw + 1);
+
+  // SIEGE BALLISTA squares the bastion off and buttresses it; SCORPION keeps a
+  // slim round turret. Round versus square is the fastest silhouette read
+  // there is, which is why the paths differ there rather than in colour.
+  let topY;
+  if (siege) {
+    for (const sgn of [-1, 1]) {                  // raking buttresses
+      shape([[x + sgn * hw, y + 1], [x + sgn * (hw + 7), y + 1],
+             [x + sgn * hw, y + 1 - drumH * 0.72]], MARBLE.dark, 1.6);
+    }
+    block(x - hw, y + 1 - drumH, hw * 2, drumH, MARBLE, 6);
+    topY = y + 1 - drumH;
+  } else {
+    topY = stoneDrum(x, y + 1, hw, drumH, MARBLE);
+  }
+  coursing(x - hw * 0.8, topY + 3, hw * 1.6, drumH - 5, 3, 3);
+
+  // Arrow loops in the drum, so it reads as built rather than as a plinth.
+  for (const lx of corbelled ? [-hw * 0.42, hw * 0.42] : [0]) {
+    shape([[x + lx - 1.6, topY + 6], [x + lx + 1.6, topY + 6],
+           [x + lx + 1.6, topY + 12], [x + lx - 1.6, topY + 12]], "#2c2318", 1.1);
+  }
+
+  if (bronzed) {                                  // bronze band round the drum
+    ctx.fillStyle = GOLD_DARK;
     ctx.beginPath();
-    ctx.moveTo(x - 19 + i * 9.5, y - 5); ctx.lineTo(x - 19 + i * 9.5, y + 8);
+    ctx.ellipse(x, topY + drumH * 0.55, hw * 0.99, hw * 0.32, 0, 0.08, Math.PI - 0.08);
+    ctx.lineTo(x - hw * 0.99, topY + drumH * 0.55 - 2.4);
+    ctx.ellipse(x, topY + drumH * 0.55 - 2.4, hw * 0.99, hw * 0.32, 0, Math.PI - 0.08, 0.08, true);
+    ctx.closePath();
+    ctx.fill();
+    ink(1.1); ctx.stroke();
+  }
+
+  // Corbels carrying the fighting deck out past the drum — the level-2 cue,
+  // and the thing that gives the machine somewhere to stand.
+  if (corbelled) {
+    for (const cx2 of [-hw * 0.8, 0, hw * 0.8]) {
+      shape([[x + cx2 - 2.4, topY + 1], [x + cx2 + 2.4, topY + 1],
+             [x + cx2 + 1.4, topY + 6], [x + cx2 - 1.4, topY + 6]], MARBLE.dark, 1.2);
+    }
+  }
+
+  // Timber fighting deck the engine is bolted to.
+  const deckW = hw + (corbelled ? 3 : -1);        // the deck must not out-span the drum
+  if (siege) {
+    shape([[x - deckW, topY + 2], [x + deckW, topY + 2],
+           [x + deckW - 2, topY - 4], [x - deckW + 2, topY - 4]],
+      vgrad(x, topY - 4, 0, 8, TIMBER), 1.8);
+  } else {
+    ctx.beginPath();
+    ctx.ellipse(x, topY - 1, deckW, deckW * 0.32, 0, 0, Math.PI * 2);
+    ctx.fillStyle = vgrad(x, topY - 4, 0, 8, TIMBER);
+    ctx.fill();
+    ink(1.8); ctx.stroke();
+  }
+  ctx.strokeStyle = "rgba(30,18,6,0.4)";                  // planking
+  ctx.lineWidth = 1;
+  for (let i = -2; i <= 2; i++) {
+    const px = x + (i * deckW) / 3;
+    const hh = deckW * 0.32 * Math.sqrt(Math.max(0, 1 - (i / 3) ** 2));
+    ctx.beginPath();
+    ctx.moveTo(px, topY - 1 - hh); ctx.lineTo(px, topY - 1 + hh);
     ctx.stroke();
   }
-  for (const sx of [-13, 13]) {                   // iron straps
-    ctx.fillStyle = "#5c5348";
-    ctx.fillRect(x + sx - 1.4, y - 5, 2.8, 13);
-    ink(1); ctx.strokeRect(x + sx - 1.4, y - 5, 2.8, 13);
-  }
 
-  for (const sx of [-15, 15]) {                   // spoked wheels
-    ctx.beginPath();
-    ctx.arc(x + sx, y + 9, 5.6, 0, Math.PI * 2);
-    ctx.fillStyle = TIMBER.mid; ctx.fill();
-    ink(1.6); ctx.stroke();
-    ctx.strokeStyle = "rgba(40,24,8,0.55)";
-    ctx.lineWidth = 1.1;
-    for (let k = 0; k < 4; k++) {
-      const a = k * Math.PI / 4;
+  // Shot stacked at the foot, and a crewman leaning on the drum.
+  if (bronzed) {
+    for (const [ox, oy, rr] of [[-hw - 5, 9, 3.4], [-hw, 11, 3], [-hw - 3.5, 5.5, 2.8]]) {
       ctx.beginPath();
-      ctx.moveTo(x + sx - Math.cos(a) * 4.6, y + 9 - Math.sin(a) * 4.6);
-      ctx.lineTo(x + sx + Math.cos(a) * 4.6, y + 9 + Math.sin(a) * 4.6);
-      ctx.stroke();
+      ctx.arc(x + ox, y + oy, rr, 0, Math.PI * 2);
+      ctx.fillStyle = "#9a948a"; ctx.fill();
+      ink(1.3); ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.beginPath();
+      ctx.arc(x + ox - rr * 0.35, y + oy - rr * 0.4, rr * 0.34, 0, Math.PI * 2);
+      ctx.fill();
     }
+  }
+
+  levelPips(t, hw + 1);
+
+  if (scorpion) {                                 // bronze swivel collar
     ctx.beginPath();
-    ctx.arc(x + sx, y + 9, 1.8, 0, Math.PI * 2);
+    ctx.ellipse(x, topY - 2, deckW * 0.62, deckW * 0.22, 0, 0, Math.PI * 2);
     ctx.fillStyle = GOLD_DARK; ctx.fill();
-    ink(1); ctx.stroke();
+    ink(1.4); ctx.stroke();
+    ctx.strokeStyle = "rgba(255,240,190,0.5)";
+    ctx.lineWidth = 0.9;
+    ctx.beginPath();
+    ctx.ellipse(x, topY - 3, deckW * 0.44, deckW * 0.15, 0, 0, Math.PI * 2);
+    ctx.stroke();
   }
 
-  // A little pile of shot beside the machine — the detail that says "crewed".
-  for (const [ox, oy, rr] of [[-25, 9, 3.4], [-20, 11, 3], [-23.5, 5.5, 2.8]]) {
-    ctx.beginPath();
-    ctx.arc(x + ox, y + oy, rr, 0, Math.PI * 2);
-    ctx.fillStyle = "#9a948a"; ctx.fill();
-    ink(1.3); ctx.stroke();
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.beginPath();
-    ctx.arc(x + ox - rr * 0.35, y + oy - rr * 0.4, rr * 0.34, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  levelPips(t, 20);
-
-  const pivotY = scorpion ? -18 : -10;
+  const pivotY = topY - y - (scorpion ? 6 : 2);   // on the deck
   const ang = aimAngle(t, pivotY);
   ctx.save();
   ctx.translate(x, y + pivotY);
   ctx.rotate(ang);
 
   if (scorpion) {
+    // A mantlet — the wicker screen a bolt-thrower crew shelters behind. Turns
+    // the machine into a turret rather than a bare engine on a plank.
+    shape([[-3, -11], [7, -8], [7, 8], [-3, 11]], "#8a6a3c", 1.5);
+    ctx.strokeStyle = "rgba(40,26,10,0.45)";
+    ctx.lineWidth = 0.9;
+    for (let i = -2; i <= 2; i++) {
+      ctx.beginPath();
+      ctx.moveTo(-2, i * 4); ctx.lineTo(6.4, i * 3.2);
+      ctx.stroke();
+    }
     // light bolt thrower: two short arms and a bowstring on a swivel post
     ctx.fillStyle = TIMBER.mid;
     ctx.beginPath();
@@ -465,7 +626,7 @@ function drawArtilleryTower(t) {
     const r = recoil(t);
     const cocked = 2.5, released = 0.5;           // radians from the deck
     const armAng = released + (cocked - released) * Math.pow(1 - r, 0.65);
-    const len = siege ? 30 : 25;
+    const len = (siege ? 25 : 20) + lvl * 2.5;   // grows with the carriage
     ctx.save();
     ctx.translate(2, -7);
     ctx.rotate(-armAng);
@@ -516,6 +677,15 @@ function drawMagicTower(t) {
   const domeC = dark ? ["#a86ad0", "#3a2050"] : ["#8fd4ee", "#25607f"];
   const flame = dark ? ["#e2a8ff", "#a050d8"] : ["#bfe8ff", "#4d9fd0"];
 
+  const lvl = t.level || 1;
+  // The tholos rises out of the ground: a squat shrine on three stumpy posts,
+  // then a proper five-column rotunda, then the same gilded and crowned. `rise`
+  // lifts every part above the stylobate together so nothing has to be
+  // positioned twice.
+  const rise = (lvl - 1) * 5;                     // 0 / 5 / 10
+  const colonnade = lvl >= 2;
+  const gilded = lvl >= 3;
+
   footing(t, 17);
 
   // Circular stylobate, drawn as an inked ellipse so the base reads as round
@@ -527,13 +697,18 @@ function drawMagicTower(t) {
 
   // Cella wall behind the colonnade. Without it the gaps between the columns
   // were simply background, and the tripod inside vanished into a dark hole.
-  shape([[x - 12, y - 4], [x + 12, y - 4], [x + 12, y - 27], [x - 12, y - 27]],
-    vgrad(0, y - 27, 0, 23, dark
+  shape([[x - 12, y - 4], [x + 12, y - 4],
+         [x + 12, y - 27 - rise], [x - 12, y - 27 - rise]],
+    vgrad(0, y - 27 - rise, 0, 23 + rise, dark
       ? { lit: "#4a3a66", mid: "#33254c", dark: "#1e1434" }
       : { lit: "#c9b891", mid: "#a8906a", dark: "#7d6647" }), 1.5);
 
-  // Ring of columns — five, the outer two foreshortened.
-  for (const [cx, ch] of [[-13, 15], [-7, 21], [0, 23], [7, 21], [13, 15]]) {
+  // Ring of columns: three short posts at level 1, a full five-column
+  // rotunda from level 2. The outer two are foreshortened.
+  const cols = colonnade
+    ? [[-13, 15 + rise], [-7, 21 + rise], [0, 23 + rise], [7, 21 + rise], [13, 15 + rise]]
+    : [[-10, 13], [0, 15], [10, 13]];
+  for (const [cx, ch] of cols) {
     const cw = cx === 0 ? 6 : 5.2;
     const bx = x + cx - cw / 2, by = y - 4 - ch;
     ctx.fillStyle = vgrad(bx, by, cw, ch, stone);
@@ -547,25 +722,25 @@ function drawMagicTower(t) {
 
   // Entablature ring, with a gold fillet.
   ctx.beginPath();
-  ctx.ellipse(x, y - 28.5, 16.5, 6, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y - 28.5 - rise, 16.5, 6, 0, 0, Math.PI * 2);
   ctx.fillStyle = stone.mid; ctx.fill();
   ink(1.7); ctx.stroke();
   ctx.beginPath();
-  ctx.ellipse(x, y - 30, 16.5, 5.4, 0, 0, Math.PI * 2);
+  ctx.ellipse(x, y - 30 - rise, 16.5, 5.4, 0, 0, Math.PI * 2);
   ctx.fillStyle = stone.lit; ctx.fill();
   ink(1.5); ctx.stroke();
   ctx.strokeStyle = GOLD_DARK;
   ctx.lineWidth = 1.4;
   ctx.beginPath();
-  ctx.ellipse(x, y - 27.5, 15, 5, 0, 0.15, Math.PI - 0.15);
+  ctx.ellipse(x, y - 27.5 - rise, 15, 5, 0, 0.15, Math.PI - 0.15);
   ctx.stroke();
 
   // THE DOME — the signature of this building, inked hard against the sky.
-  const dg = ctx.createRadialGradient(x - 5, y - 41, 2, x, y - 32, 18);
+  const dg = ctx.createRadialGradient(x - 5, y - 41 - rise, 2, x, y - 32 - rise, 18);
   dg.addColorStop(0, domeC[0]);
   dg.addColorStop(1, domeC[1]);
   ctx.beginPath();
-  ctx.ellipse(x, y - 30, 15.5, 16, 0, Math.PI, 0);
+  ctx.ellipse(x, y - 30 - rise, 15.5, 16 * (colonnade ? 1 : 0.72), 0, Math.PI, 0);
   ctx.closePath();
   ctx.fillStyle = dg; ctx.fill();
   ink(1.9); ctx.stroke();
@@ -573,18 +748,20 @@ function drawMagicTower(t) {
   ctx.lineWidth = 1.2;
   for (const rx of [-10, -5, 0, 5, 10]) {
     ctx.beginPath();
-    ctx.ellipse(x, y - 30, Math.abs(rx) || 0.6, 16, 0, Math.PI, 0);
+    ctx.ellipse(x, y - 30 - rise, Math.abs(rx) || 0.6, 16 * (colonnade ? 1 : 0.72), 0, Math.PI, 0);
     ctx.stroke();
   }
-  ctx.beginPath();                                 // finial
-  ctx.arc(x, y - 47, 3.4, 0, Math.PI * 2);
-  ctx.fillStyle = GOLD; ctx.fill();
-  ink(1.4); ctx.stroke();
-  ctx.strokeStyle = GOLD;
-  ctx.lineWidth = 1.6;
-  ctx.beginPath();
-  ctx.moveTo(x, y - 50.5); ctx.lineTo(x, y - 46);
-  ctx.stroke();
+  if (gilded) {                                    // finial, fully upgraded only
+    ctx.beginPath();
+    ctx.arc(x, y - 47 - rise, 3.4, 0, Math.PI * 2);
+    ctx.fillStyle = GOLD; ctx.fill();
+    ink(1.4); ctx.stroke();
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 1.6;
+    ctx.beginPath();
+    ctx.moveTo(x, y - 50.5 - rise); ctx.lineTo(x, y - 46 - rise);
+    ctx.stroke();
+  }
 
   // Tripod flame glowing out of the open front.
   const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 260);
@@ -631,10 +808,66 @@ function drawMagicTower(t) {
   ctx.fillStyle = flame[0];
   ctx.fill();
 
+  // SEERS OF DELPHI: three tripods, with the prophecy arcing between them —
+  // this path's whole trick is that a bolt carries from one victim to the next,
+  // so the building shows a chain.
+  if (t.spec === "delphi") {
+    const arcT = performance.now() / 200;
+    for (const sx of [-8.5, 8.5]) {
+      ctx.strokeStyle = "#8a6520";
+      ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(x + sx, y - 5); ctx.lineTo(x + sx, y - 12);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.ellipse(x + sx, y - 12.5, 3.4, 1.5, 0, 0, Math.PI * 2);
+      ctx.fillStyle = GOLD_DARK; ctx.fill();
+      ink(1.1); ctx.stroke();
+      ctx.fillStyle = flame[0];
+      ctx.beginPath();
+      ctx.arc(x + sx, y - 15, 2 + Math.sin(arcT + sx) * 0.4, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.strokeStyle = `rgba(190,235,255,${0.45 + 0.35 * Math.abs(Math.sin(arcT))})`;
+    ctx.lineWidth = 1.4;
+    for (const sx of [-8.5, 8.5]) {
+      ctx.beginPath();
+      ctx.moveTo(x + sx, y - 15);
+      ctx.quadraticCurveTo(x + sx * 0.5, y - 21 - Math.sin(arcT * 1.3) * 2, x, y - 17);
+      ctx.stroke();
+    }
+  }
+
+  // SHRINE OF HEKATE: the hekataion — one pillar, three faces, three torches,
+  // the goddess of the crossroads looking every way at once.
+  if (dark) {
+    for (const [sx, sy] of [[-7, -13], [0, -17], [7, -13]]) {
+      ctx.strokeStyle = "#4a3a66";
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x + sx, y - 4); ctx.lineTo(x + sx, y + sy);
+      ctx.stroke();
+      const f = 0.6 + 0.4 * Math.sin(performance.now() / 190 + sx);
+      const tg = ctx.createRadialGradient(x + sx, y + sy - 2, 0, x + sx, y + sy - 2, 5 * f);
+      tg.addColorStop(0, "rgba(226,168,255,0.95)");
+      tg.addColorStop(1, "rgba(160,80,216,0)");
+      ctx.fillStyle = tg;
+      ctx.beginPath();
+      ctx.arc(x + sx, y + sy - 2, 5 * f, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#e2a8ff";
+      ctx.beginPath();
+      ctx.moveTo(x + sx - 1.4, y + sy);
+      ctx.quadraticCurveTo(x + sx, y + sy - 5 - f, x + sx + 1.4, y + sy);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
   // Prophecy motes rising off the flame — the one thing on the board that
   // says "this building does magic" without a colour swap.
   const tt = performance.now() / 900;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; gilded && i < 3; i++) {
     const ph = (tt + i / 3) % 1;
     ctx.fillStyle = `rgba(${dark ? "226,168,255" : "191,232,255"},${0.7 * (1 - ph)})`;
     ctx.beginPath();
@@ -652,57 +885,108 @@ function drawBarracksTower(t) {
   const spartiate = t.spec === "spartiate";
   const myrmidon = t.spec === "myrmidon";
 
-  footing(t, 21);
+  const lvl = t.level || 1;
+  // A muster yard grows sideways and gets a better roof: a thatched shed on two
+  // posts, then a tiled portico on four, then the same crowned and flagged.
+  const hw = 15 + (lvl - 1) * 3;                  // 15 / 18 / 21
+  const portico = lvl >= 2;                       // four columns + tiled roof
+  const crowned = lvl >= 3;                       // akroterion, pennant, hoplon
+
+  footing(t, hw);
 
   // Back wall, deliberately low, with a dark open front cut into it.
-  block(x - 21, y - 21, 42, 23, MARBLE, 5);
-  coursing(x - 21, y - 21, 42, 23, 3, 4);
-  shape([[x - 12, y - 15], [x + 12, y - 15], [x + 12, y + 1], [x - 12, y + 1]],
+  block(x - hw, y - 21, hw * 2, 23, MARBLE, 5);
+  coursing(x - hw, y - 21, hw * 2, 23, 3, 4);
+  const dw = Math.min(12, hw - 4);
+  shape([[x - dw, y - 15], [x + dw, y - 15], [x + dw, y + 1], [x - dw, y + 1]],
     "#33291c", 1.6);
   const inner = ctx.createLinearGradient(0, y - 15, 0, y + 1);   // depth in the doorway
   inner.addColorStop(0, "rgba(255,200,120,0.20)");
   inner.addColorStop(1, "rgba(0,0,0,0)");
   ctx.fillStyle = inner;
-  ctx.fillRect(x - 12, y - 15, 24, 16);
+  ctx.fillRect(x - dw, y - 15, dw * 2, 16);
 
-  // Four short columns across the front.
-  for (const cx of [-18, -6, 6, 18]) column(x + cx, y + 1, 17, 5.4);
+  // SPARTIATES wall the front up into a blockhouse; MYRMIDONS throw it open
+  // into a muster court. "Nothing gets past them" against "they go looking for
+  // the fight" — the two paths should not share a front elevation.
+  if (spartiate) {
+    block(x - dw - 1, y - 16, (dw + 1) * 2, 17, MARBLE, 4);      // sealed wall
+    coursing(x - dw - 1, y - 16, (dw + 1) * 2, 17, 3, 3);
+    for (let i = -1; i <= 1; i++) {                              // hung shields
+      const sx = x + i * 8.4;
+      ctx.beginPath();
+      ctx.arc(sx, y - 8, 4.4, 0, Math.PI * 2);
+      ctx.fillStyle = GOLD_DARK; ctx.fill();
+      ink(1.4); ctx.stroke();
+      ctx.strokeStyle = "rgba(255,240,190,0.45)";
+      ctx.lineWidth = 0.8;
+      ctx.beginPath();
+      ctx.arc(sx, y - 8, 2.4, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    shape([[x - dw - 3, y - 16], [x + dw + 3, y - 16],
+           [x + dw + 3, y - 19], [x - dw - 3, y - 19]], MARBLE.lit, 1.5);
+  }
 
-  // Long shallow gable — wide and flat, not the archer's tall cap.
-  shape([[x - 25, y - 23], [x + 25, y - 23], [x + 25, y - 19], [x - 25, y - 19]],
-    MARBLE.lit, 1.7);
-  tiledRoof(x, y - 23, 25, 10);
+  // Columns across the front — two posts, a four-column portico, or the
+  // Myrmidons' six.
+  const posts = myrmidon ? [-hw + 3, -hw * 0.55, -4, 4, hw * 0.55, hw - 3]
+    : portico ? [-hw + 3, -6, 6, hw - 3] : [-hw + 3, hw - 3];
+  for (const cx of posts) column(x + cx, y + 1, 17, myrmidon ? 4.4 : 5.4);
 
-  // Akroterion at the peak, and a pennant, so the roofline isn't just a wedge.
-  shape([[x - 3, y - 33], [x, y - 38], [x + 3, y - 33]], GOLD, 1.4);
-  ctx.strokeStyle = "#6b4a24";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(x + 20, y - 27); ctx.lineTo(x + 20, y - 42);
-  ctx.stroke();
-  banner(x + 24, y - 41, 8, 7, spartiate ? "#8a1f1f" : myrmidon ? "#3c2a52" : "#20304a", 1.1);
+  // Roof. Thatch first — a plain shallow wedge in timber, no tiles — then the
+  // terracotta pantiles, which are the loudest colour the building ever wears.
+  shape([[x - hw - 4, y - 23], [x + hw + 4, y - 23],
+         [x + hw + 4, y - 19], [x - hw - 4, y - 19]], MARBLE.lit, 1.7);
+  tiledRoof(x, y - 23, hw + 4, 10, portico ? TERRA : TIMBER);
+
+  // Akroterion at the peak and a pennant, so a maxed yard has a roofline
+  // instead of just a wedge.
+  if (crowned) {
+    shape([[x - 3, y - 33], [x, y - 38], [x + 3, y - 33]], GOLD, 1.4);
+    ctx.strokeStyle = "#6b4a24";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x + hw - 1, y - 27); ctx.lineTo(x + hw - 1, y - 42);
+    ctx.stroke();
+    banner(x + hw + 3, y - 41, 8, 7,
+      spartiate ? "#8a1f1f" : myrmidon ? "#3c2a52" : "#20304a", 1.1);
+  }
+
+  // MYRMIDONS: a standard planted in the yard. A company that leaves the
+  // building to fight has something to muster around.
+  if (myrmidon) {
+    ctx.strokeStyle = "#6b4a24";
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x - 2, y + 2); ctx.lineTo(x - 2, y - 30);
+    ctx.stroke();
+    shape([[x - 4.4, y - 30], [x + 0.4, y - 30], [x - 2, y - 35]], GOLD, 1.2);
+    banner(x + 2.6, y - 28, 9, 8, "#3c2a52", 0.4);
+  }
 
   // Hung hoplon, blazon by specialisation.
-  const face = ctx.createRadialGradient(x - 16, y - 12, 1, x - 14, y - 10, 9);
+  const hox = -hw + 7;                            // hoplon rides the left bay
+  const face = ctx.createRadialGradient(x + hox - 2, y - 12, 1, x + hox, y - 10, 9);
   face.addColorStop(0, "#f0cd80");
   face.addColorStop(1, "#7d4f10");
   ctx.beginPath();
-  ctx.arc(x - 14, y - 10, 7.6, 0, Math.PI * 2);
+  ctx.arc(x + hox, y - 10, 7.6, 0, Math.PI * 2);
   ctx.fillStyle = face; ctx.fill();
   ink(1.7); ctx.stroke();
   ctx.strokeStyle = "rgba(60,38,10,0.55)";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.arc(x - 14, y - 10, 4.6, 0, Math.PI * 2);
+  ctx.arc(x + hox, y - 10, 4.6, 0, Math.PI * 2);
   ctx.stroke();
   ctx.fillStyle = spartiate ? "#8a1f1f" : myrmidon ? "#3c2a52" : "#20304a";
   ctx.font = "bold 9px Georgia, serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText(spartiate ? "\u039b" : myrmidon ? "\u039c" : "\u0391", x - 14, y - 9.5);
+  ctx.fillText(spartiate ? "\u039b" : myrmidon ? "\u039c" : "\u0391", x + hox, y - 9.5);
 
   // Racked spears along the right of the front.
-  const spears = myrmidon ? 4 : 3;
+  const spears = myrmidon ? 4 : lvl;              // the rack fills up as it upgrades
   for (let i = 0; i < spears; i++) {
     const sx = x + 8 + i * 3.8;
     ctx.strokeStyle = "#6b4a24";

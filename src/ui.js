@@ -16,6 +16,8 @@ import { dist } from "./geometry.js";
 import { state, BUILD_SPOTS, LEVEL, spotOccupied } from "./state.js";
 import { upgradeCost, sellValue } from "./entities.js";
 import * as act from "./actions.js";
+import { withCanvas } from "./render/canvas.js";
+import { drawTower } from "./render/towers.js";
 import { canvas } from "./render.js";
 import { startNextWave, resetRun, earlyCallBonus } from "./simulation.js";
 import { installSimHooks } from "./simHooks.js";
@@ -131,11 +133,13 @@ function openManageMenu(tower) {
       const btn = document.createElement("button");
       btn.className = "spec";
       btn.disabled = !act.canSpecialize(tower, s.key).ok;
-      btn.innerHTML = `<span class="sp-name">${s.icon} ${s.name}</span>` +
+      btn.innerHTML = `<canvas class="sp-art"></canvas>` +
+        `<span class="sp-name">${s.icon} ${s.name}</span>` +
         `<span class="sp-cost">💰${s.cost}</span>` +
         `<span class="sp-blurb">${s.blurb}</span>`;
       btn.addEventListener("click", (ev) => { ev.stopPropagation(); specializeTower(tower, s.key); });
       towerMenu.appendChild(btn);
+      paintSpecArt(btn.querySelector(".sp-art"), tower.type, s.key);
     }
   }
 
@@ -173,6 +177,36 @@ function upgradeTower(t) {
   setTip(res.ok ? "" : res.reason);
   updateHud();
   if (res.ok) openManageMenu(t); // refresh the panel with new level / costs
+}
+
+// Paint one path's building into its button, using the real tower renderer.
+//
+// Specialising is permanent, and the two branches are now genuinely different
+// structures rather than recolours — a walled Spartiate blockhouse against an
+// open Myrmidon court, a square siege bastion against a round swivel turret.
+// A player choosing between those deserves to see them.
+function paintSpecArt(cv, type, specKey) {
+  if (!cv) return;
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = 46, h = 52;
+  cv.width = w * dpr;
+  cv.height = h * dpr;
+  const g = cv.getContext("2d");
+  g.scale(dpr, dpr);
+  // Same per-type normalisation the Field Guide uses — an Amazon spire is
+  // roughly twice a Ballista, so one shared scale leaves half the tiles empty.
+  const TOWER_H = { archer: 108, artillery: 66, barracks: 58, magic: 76 };
+  try {
+    withCanvas(g, () => {
+      g.translate(w / 2, h - 4);
+      const k = Math.min(0.9, (h - 8) / (TOWER_H[type] || 80));
+      g.scale(k, k);
+      drawTower({ x: 0, y: 0, type, level: 3, spec: specKey,
+                  fireRate: 1, cooldown: 0, range: 0, hitsAir: true });
+    });
+  } catch {
+    // A thumbnail that cannot draw must never block the choice itself.
+  }
 }
 
 function specializeTower(t, specKey) {

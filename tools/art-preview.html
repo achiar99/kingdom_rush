@@ -42,7 +42,8 @@
   // the right view for spotting two creatures that look alike; it is the wrong
   // view for judging whether any single one is actually drawn well, because a
   // twelve-pixel creep in a 1500px sheet is unreadable. Focus mode is for that.
-  //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters | towers | heroes
+  //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters
+  //   ?focus=towers | levels | heroes
   const PARAMS = new URLSearchParams(location.search);
   const FOCUS = PARAMS.get("focus");
   // ?zoom=N and ?only=<type> for close inspection of a single tower
@@ -57,6 +58,29 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, x, y);
+  }
+
+  // Each tower at all three levels, side by side. Upgrades are supposed to be
+  // visible from across the board, and the only way to check that is to see
+  // level 1 next to level 3 rather than one at a time.
+  function drawLevelSheet() {
+    ctx.clearRect(0, 0, 1500, 1120);
+    const types = TYPE_LIST.filter((k) => !ONLY || k === ONLY);
+    const CW = 1500 / 3, RH = 1080 / types.length, Z = ZOOM_OVERRIDE || 2.4;
+    types.forEach((key, r) => {
+      for (let lv = 1; lv <= 3; lv++) {
+        const cx = (lv - 1) * CW + CW / 2, cy = r * RH + RH * 0.66;
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(Z, Z);
+        ctx.translate(-cx, -cy);
+        drawTower({ x: cx, y: cy, type: key, level: lv, spec: null,
+                    fireRate: 1, cooldown: 0, range: 0, hitsAir: true });
+        ctx.restore();
+        label(`${TOWER_TYPES[key].name} \u2014 level ${lv}`, cx, cy + 46,
+          lv === 3 ? "#ffcf52" : "#e8ecf4", 13, 700);
+      }
+    });
   }
 
   // Every tower, every specialisation, at three times the size. Towers are
@@ -74,7 +98,7 @@
     const CW = 1500 / 3, RH = 270, Z = ZOOM_OVERRIDE || 3;
     rows.forEach((variants, r) => {
       variants.forEach((v, c) => {
-        const cx = c * CW + CW / 2, cy = r * RH + (ONLY ? 560 : 215);
+        const cx = c * CW + CW / 2, cy = r * RH + (ONLY ? 560 : 250);
         ctx.save();
         ctx.translate(cx, cy);
         ctx.scale(Z, Z);
@@ -150,6 +174,7 @@
 
   function draw() {
     if (FOCUS === "towers") return drawTowerSheet();
+    if (FOCUS === "levels") return drawLevelSheet();
     if (FOCUS === "heroes") return drawHeroSheet();
     if (FOCUS) return drawFocus();
     ctx.clearRect(0, 0, 1500, 1120);
