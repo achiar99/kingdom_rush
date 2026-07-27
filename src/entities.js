@@ -26,7 +26,9 @@ export function damageEnemy(e, dmg, isMagic) {
 // up to play it.
 export function makeEnemy(entry, dist = 0) {
   const d = KIT[entry.type];
-  const hp = d.hp * entry.hpMul;
+  // A master's health is set outright rather than multiplied by the level's
+  // difficulty — see MASTERS in data/enemyKits.js for why.
+  const hp = d.absoluteHp ?? d.hp * entry.hpMul;
   const p = dist > 0 ? pointAtDistance(PATH, pathLength(PATH), dist) : PATH[0];
   return {
     type: entry.type, def: d, dist,

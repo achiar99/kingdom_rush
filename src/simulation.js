@@ -421,14 +421,25 @@ function updateSummonedSoldiers(dt) {
 
 // Target the enemy furthest along the path that's within range — skipping
 // flyers entirely for towers that can't shoot upward (the Ballista).
+//
+// A stage master outranks that rule and is always fired on first.
+//
+// Without this the master was effectively invulnerable, and not because of its
+// health: "furthest along" plus "slowest thing in the wave" meant its own
+// escort overtook it and soaked every shot on the board. A perfect defence
+// stripped 5-21% off it before it walked the entire path, and dropping its HP
+// from 4200 to 600 barely moved the needle — it was never being shot at. Now
+// everything turns to face the boss, which is also what you'd expect it to do.
 export function acquireTarget(tower) {
-  let best = null, bestDist = -1;
+  let best = null, bestDist = -1, bestIsMaster = false;
   for (const e of state.enemies) {
     if (e.dead) continue;
     if (e.flying && !tower.hitsAir) continue;
-    if (dist(tower.x, tower.y, e.x, e.y) <= tower.range && e.dist > bestDist) {
-      best = e; bestDist = e.dist;
-    }
+    if (dist(tower.x, tower.y, e.x, e.y) > tower.range) continue;
+    const isMaster = e.def.role === "master";
+    if (bestIsMaster && !isMaster) continue;          // a master already has priority
+    if (isMaster && !bestIsMaster) { best = e; bestDist = e.dist; bestIsMaster = true; continue; }
+    if (e.dist > bestDist) { best = e; bestDist = e.dist; }
   }
   return best;
 }
@@ -573,10 +584,14 @@ function updateHero(dt) {
   if (def.attack === "ranged") {
     hero.shootCd -= dt;
     if (hero.shootCd <= 0 && !inMelee && !hero.forcedMove) {
-      let best = null, bestDist = -1;
+      let best = null, bestDist = -1, bestIsMaster = false;
       for (const e of state.enemies) {
         if (e.dead) continue;
-        if (dist(hero.x, hero.y, e.x, e.y) <= def.range && e.dist > bestDist) { best = e; bestDist = e.dist; }
+        if (dist(hero.x, hero.y, e.x, e.y) > def.range) continue;
+        const isMaster = e.def.role === "master";
+        if (bestIsMaster && !isMaster) continue;
+        if (isMaster && !bestIsMaster) { best = e; bestDist = e.dist; bestIsMaster = true; continue; }
+        if (e.dist > bestDist) { best = e; bestDist = e.dist; }
       }
       if (best) {
         state.projectiles.push({

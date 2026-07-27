@@ -258,6 +258,13 @@ export const ENEMY_KITS = {
 const master = (name, colors, art, tweaks = {}) => ({
   role: "master", name, colors,
   art: { frame: "biped", crest: "crown", carry: "none", aura: "none", scale: 1.35, ...art },
+  // absoluteHp bypasses hpScale and the wave's hpMul entirely — see makeEnemy.
+  //
+  // Every other creature is a template multiplied by its level's difficulty.
+  // A master is one hand-placed fight, and inheriting that multiplier made it
+  // unkillable: trash HP scales 3.9x to 8.8x across the campaign while the
+  // board's damage ceiling barely moves, so the same boss went from hard to
+  // impossible purely by being later. These are the numbers it actually has.
   radius: 34, hp: 4200, speed: 22, reward: 500,
   armor: 0.4, magicResist: 0.2, flying: false, boss: true,
   // A master walks THROUGH a phalanx. It swings hard, swings fast, and every
@@ -267,25 +274,37 @@ const master = (name, colors, art, tweaks = {}) => ({
   ...tweaks,
 });
 
+// `absoluteHp` is the health the master actually has, full stop — it is the
+// third argument (stat tweaks), not part of the art recipe.
+//
+// These were solved against tools/sim, not chosen by feel, and they go DOWN
+// in the later stages rather than up. That looks backwards until you notice
+// the escort: a Stage V finale is already a far worse wave than a Stage I one
+// before the boss walks on, so the boss itself has to take up less of the
+// budget. Tuning them by intuition produced 0% win rates on four of five.
 export const MASTERS = {
   troy: master("Hector, Breaker of Ships",
     // blackened bronze and deep ox-blood, so he doesn't read as a recoloured
     // Champion of Ilion standing next to him in the guide
     { light: "#c9a24a", mid: "#6e4a1c", dark: "#2a1c08" },
-    { frame: "biped", crest: "plume", carry: "spearShield", aura: "flame" }),
+    { frame: "biped", crest: "plume", carry: "spearShield", aura: "flame" },
+    { absoluteHp: 9000 }),
   arcadia: master("Lykaon, the Wolf-King",
     { light: "#d8cbb0", mid: "#8a7a58", dark: "#443a26" },
-    { frame: "quadruped", crest: "crown", aura: "regen" }),
+    { frame: "quadruped", crest: "crown", aura: "regen" },
+    { absoluteHp: 12000 }),
   labyrinth: master("The Chimera",
     { light: "#ffc078", mid: "#c05a20", dark: "#5e2408" },
-    { frame: "quadruped", crest: "snakes", aura: "flame" }),
+    { frame: "quadruped", crest: "snakes", aura: "flame" },
+    { absoluteHp: 8800 }),
   hades: master("Thanatos, Bringer of Death",
     { light: "#cfd8e8", mid: "#5c6a88", dark: "#232c40" },
-    { frame: "biped", crest: "wisp", carry: "scythe", aura: "spectral" }),
+    { frame: "biped", crest: "wisp", carry: "scythe", aura: "spectral" },
+    { absoluteHp: 10500 }),
   olympus: master("Kronos, Father of Titans",
     { light: "#ffe6a8", mid: "#b88a2c", dark: "#5a3c08" },
     { frame: "colossus", crest: "crown", carry: "scythe", aura: "storm", scale: 1.5 },
-    { hp: 5600, radius: 38 }),
+    { radius: 38, absoluteHp: 9000 }),
 };
 
 // Folded into each kit under the key "master", so makeEnemy's KIT[type] lookup
