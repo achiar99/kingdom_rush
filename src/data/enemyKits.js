@@ -309,23 +309,23 @@ export const MASTERS = {
     // Champion of Ilion standing next to him in the guide
     { light: "#c9a24a", mid: "#6e4a1c", dark: "#2a1c08" },
     { frame: "hulk", skin: "bronze", crest: "plume", carry: "spearShield", aura: "flame" },
-    { absoluteHp: 10800 }),
+    { absoluteHp: 8300 }),
   arcadia: master("Lykaon, the Wolf-King",
     { light: "#d8cbb0", mid: "#8a7a58", dark: "#443a26" },
     { frame: "hulk", skin: "fur", crest: "mane", carry: "twinBlades", aura: "regen" },
-    { absoluteHp: 10000 }),
+    { absoluteHp: 9000 }),
   labyrinth: master("The Chimera",
     { light: "#ffc078", mid: "#c05a20", dark: "#5e2408" },
     { frame: "hydra", skin: "ember", crest: "mane", aura: "flame" },
-    { absoluteHp: 13500 }),
+    { absoluteHp: 8000 }),
   hades: master("Thanatos, Bringer of Death",
     { light: "#cfd8e8", mid: "#5c6a88", dark: "#232c40" },
     { frame: "wraith", skin: "tattered", crest: "skullface", carry: "scythe", aura: "spectral" },
-    { absoluteHp: 10000 }),
+    { absoluteHp: 9000 }),
   olympus: master("Kronos, Father of Titans",
     { light: "#ffe6a8", mid: "#b88a2c", dark: "#5a3c08" },
     { frame: "colossus", skin: "stone", crest: "crown", carry: "trident", aura: "storm", scale: 1.5 },
-    { radius: 38, absoluteHp: 10000 }),
+    { radius: 38, absoluteHp: 8000 }),
 };
 
 // Folded into each kit under the key "master", so makeEnemy's KIT[type] lookup

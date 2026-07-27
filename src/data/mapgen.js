@@ -115,8 +115,11 @@ function wanderSkeleton(rand) {
   const pick = (edge) => edgeCells[edge][Math.floor(rand() * edgeCells[edge].length)];
   const start = pick(e1), goal = pick(e2);
 
-  // randomized DFS for a self-avoiding path of at least minCells cells
-  const minCells = 22;
+  // Randomized DFS for a self-avoiding path between the length bounds. The
+  // first cut demanded 22+ cells, which filled the field like a hedge maze —
+  // a road, not a labyrinth, is the brief: cross the map, hook a few times,
+  // leave. The upper bound matters as much as the lower one.
+  const minCells = 15, maxCells = 19;
   const visited = new Uint8Array(COLS * ROWS);
   const walk = [];
   let calls = 0;
@@ -124,7 +127,8 @@ function wanderSkeleton(rand) {
     if (++calls > 30000) return false;             // determinism-safe bailout
     visited[idx(c, r)] = 1;
     walk.push([c, r]);
-    if (c === goal[0] && r === goal[1] && walk.length >= minCells) return true;
+    if (c === goal[0] && r === goal[1]
+        && walk.length >= minCells && walk.length <= maxCells) return true;
     const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
       .map((d) => ({ d, k: rand() }))
       .sort((a, b) => a.k - b.k)
@@ -142,9 +146,12 @@ function wanderSkeleton(rand) {
   if (!dfs(start[0], start[1])) return null;       // caller tries the next seed
 
   // cells -> jittered control points, plus off-screen extensions at both ends
+  // Jitter capped at ±24% of a cell: at ±34% two adjacent corridors could
+  // close to ~70px, and the road is painted ~65px wide with its fringe — the
+  // generator's clearance floor has to stay above what the renderer paints.
   const centre = ([c, r]) => ({
-    x: Math.round((c + 0.5) * cw + (rand() - 0.5) * cw * 0.34),
-    y: Math.round((r + 0.5) * ch + (rand() - 0.5) * ch * 0.34),
+    x: Math.round((c + 0.5) * cw + (rand() - 0.5) * cw * 0.24),
+    y: Math.round((r + 0.5) * ch + (rand() - 0.5) * ch * 0.24),
   });
   const pts = walk.map(centre);
   // Top-edge roads barely leave the world: the sky band sits directly above
@@ -175,10 +182,11 @@ function spiralSkeleton(rand) {
   const pts = [{ x: X(-30), y: Y(m) }];
   // Each entry: [corner-x, corner-y] in unmirrored space; legs between corners
   // get one bowed midpoint so the coil breathes without risking a collision.
+  // One outer ring, half an inner one, then the heart — the 2.25-turn version
+  // measured ~4,600px of road, a third longer than any other archetype.
   const corners = [
     [W - m, m], [W - m, H - m], [m, H - m], [m, m + g],
-    [W - m - g, m + g], [W - m - g, H - m - g], [m + g, H - m - g], [m + g, m + 2 * g],
-    [W / 2, m + 2 * g],
+    [W / 2 + 90, m + g], [W / 2 + 90, H / 2],
   ];
   let prev = pts[0];
   for (const [cx, cy] of corners) {
@@ -191,7 +199,7 @@ function spiralSkeleton(rand) {
     prev = c;
   }
   // the last step into the heart, where the temple stands
-  pts.push({ x: X(W / 2), y: Y(m + 2 * g + 42) });
+  pts.push({ x: X(W / 2 - 40), y: Y(H / 2) });
   return pts;
 }
 
@@ -206,27 +214,20 @@ function spiralSkeleton(rand) {
 // around the merge and along the shared tail — is suddenly the most valuable
 // real estate on the map.
 function forkSkeleton(rand) {
-  // Seven heights: three lanes per branch, the merge lane dead centre. Two
-  // crossings per branch measured ~2,550px per route, and at that length the
-  // exposure band is unreachable no matter where the spots go — each creep
-  // simply isn't on the road long enough. Three crossings brings a route back
-  // to ~3,400px, inside what the campaign's difficulty math assumes.
-  const m = 52;
-  const gap = (H - m * 2) / 6;
+  // Six heights: two crossings per branch, the merge midway between the inner
+  // lanes. Branches enter together on one side, each sweeps its half of the
+  // field, and the merged road runs one final crossing out the other side —
+  // short, and unmistakably a Y when creeps stream down both arms.
+  const m = 56;
+  const gap = (H - m * 2) / 5;
   const ys = [];
-  for (let i = 0; i < 7; i++) ys.push(Math.round(m + i * gap + (rand() - 0.5) * gap * 0.2));
+  for (let i = 0; i < 6; i++) ys.push(Math.round(m + i * gap + (rand() - 0.5) * gap * 0.25));
   const mirrored = rand() < 0.5;
   const X = (x) => (mirrored ? W - x : x);
-  const bow = Math.min(12, gap * 0.16);           // lanes sit close; keep them apart
-  // Crossings run as wide as the hairpins allow: every pixel of width is route
-  // length, and route length is exposure the band needs. (Was W-120-160 /
-  // 96-136, which left the weak route ~10% under the band with no spot layout
-  // able to close the gap.)
+  const bow = Math.min(14, gap * 0.16);
   const farX = W - 100 - Math.round(rand() * 22);
   const nearX = 78 + Math.round(rand() * 22);
 
-  // one serpentine crossing with two bowed waypoints, matching the main
-  // skeleton's lane shape
   const lane = (pts, fromX, toX, y) => {
     for (const f of [0.34, 0.68])
       pts.push({ x: Math.round(X(fromX + (toX - fromX) * f)),
@@ -238,40 +239,27 @@ function forkSkeleton(rand) {
     pts.push({ x: X(x), y: yTo });
   };
 
-  // The merge sits left of centre, midway between the two inner lanes. The
-  // shared road then runs ONE full crossing and exits on the far side — an
-  // earlier version gave it a second crossing back through the middle, and
-  // that lane unavoidably crossed whichever branch was climbing into the
-  // merge (measured: routes 6px apart, i.e. a road drawn over a road).
-  const midY = ys[3];
-  // The merge sits at the FAR turn, and the shared road runs back across the
-  // middle to exit on the entry side. Crucially the shared segment is ONE
-  // control-point array reused by both routes — an earlier version gave each
-  // branch its own copy of the final crossing, and since every lane gets its
-  // own random bows, the two roads overlapped as a wobbling ±12px braid.
-  const M = { x: X(farX), y: midY };
+  const midY = Math.round((ys[2] + ys[3]) / 2);
+  const M = { x: X(nearX), y: midY };
 
-  // branch A: enters top-left, three crossings in the top band, down into M
+  // branch A: enters top, one crossing out and one back, down into the merge
   const A = [{ x: X(-30), y: ys[0] }];
   lane(A, -30, farX, ys[0]);
   turn(A, farX, ys[0], ys[1], 1);
   lane(A, farX, nearX, ys[1]);
-  turn(A, nearX, ys[1], ys[2], -1);
-  lane(A, nearX, farX, ys[2]);
-  turn(A, farX, ys[2], midY, 1);
+  turn(A, nearX, ys[1], midY, -1);
 
-  // branch B: enters bottom-left, three crossings in the bottom band, up into M
-  const B = [{ x: X(-30), y: ys[6] }];
-  lane(B, -30, farX, ys[6]);
-  turn(B, farX, ys[6], ys[5], 1);
-  lane(B, farX, nearX, ys[5]);
-  turn(B, nearX, ys[5], ys[4], -1);
-  lane(B, nearX, farX, ys[4]);
-  turn(B, farX, ys[4], midY, 1);
+  // branch B: the mirror of A through the bottom half
+  const B = [{ x: X(-30), y: ys[5] }];
+  lane(B, -30, farX, ys[5]);
+  turn(B, farX, ys[5], ys[4], 1);
+  lane(B, farX, nearX, ys[4]);
+  turn(B, nearX, ys[4], midY, -1);
 
-  // the shared road: one crossing from the merge back out the entry side
+  // the shared road: ONE control-point array reused by both routes, so the
+  // merged stretch is pixel-identical rather than two wobbling copies
   const shared = [M];
-  lane(shared, farX, -30, midY);
+  lane(shared, nearX, W + 30, midY);
 
   return [
     [...A, ...shared],
@@ -420,17 +408,19 @@ export function exposurePerSpot(path, spots, range = 130) {
 
 // The band a map has to land in to be used. Narrow on purpose: variety should
 // come from the shape of the route, not from whether it's defensible.
-export const EXPOSURE_BAND = [495, 545];
+// Re-derived after the campaign's roads were shortened ~30% (a road that
+// filled the field like a hedge maze was the complaint). Exposure scales with
+// route length, so the old [495, 545] became unreachable everywhere — these
+// come from measuring what the shortened shapes actually deliver: wander
+// medians 466, spiral 437, serpentine 472. hpScale was refit on top, so the
+// absolute number matters less than every map agreeing on it.
+export const EXPOSURE_BAND = [420, 480];
 
-// Forks get a lower floor, on purpose and after measuring the alternative.
-// With three crossings per branch — the most road the geometry can hold
-// without lanes touching — the weaker route tops out around 470-485: ground
-// that watches branch A is ground that isn't watching branch B, and no spot
-// layout closes that. So a fork map is inherently ~5-8% less defended per
-// creep than a serpentine, and this band admits that honestly rather than
-// letting every fork fall through to an unvalidated closest-miss. Forks are
-// placed as the HARD levels of each stage, where that edge is the point.
-export const FORK_EXPOSURE_BAND = [455, 545];
+// Forks keep their own lower floor: a fork route measures ~322-375 — ground
+// watching branch A isn't watching branch B, and the routes are short. Fork
+// maps are dealt two extra build spots in compensation (see levels.js), which
+// closes most of the gap; the rest is the hard-level edge they exist for.
+export const FORK_EXPOSURE_BAND = [330, 480];
 
 // ------------------------------------------------------------------ entry
 // `seed` is the starting point, not necessarily the seed used: candidates are
@@ -443,7 +433,7 @@ export function generateMap(seed, { spots = 9, lanes = null, tries = 60, archety
 
   for (let attempt = 0; attempt < tries; attempt++) {
     const rand = rng(seed + attempt * 101);
-    const laneCount = lanes ?? 3 + Math.floor(rand() * 3); // 3-5
+    const laneCount = lanes ?? 3 + Math.floor(rand() * 2); // 3-4 — 5 outran every other archetype
 
     // One archetype, one to two routes. Every route ends at the same exit, so
     // there is always exactly one temple.
@@ -474,5 +464,10 @@ export function generateMap(seed, { spots = 9, lanes = null, tries = 60, archety
     const miss = Math.max(...exposures.map((e) => Math.abs(e - mid)));
     if (!best || miss < best.miss) best = { candidate, miss };
   }
+  // Only reachable if every attempt failed to produce a candidate at all —
+  // e.g. a wander seed whose walk search bottomed out every try. One more
+  // pass with the serpentine, which cannot fail, beats returning null into
+  // fifty call sites that never expect it.
+  if (!best) return generateMap(seed + 7717, { spots, lanes, tries, archetype: "serpentine" });
   return best.candidate;
 }

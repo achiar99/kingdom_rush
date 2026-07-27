@@ -20,13 +20,15 @@ export const CONFIG = {
   // This is measured from the end of the current wave's own spawn, not from
   // its start, so a long wave isn't buried by the next one.
   //
-  // 105s was solved against the target curve, not chosen by feel. A creep
-  // walks the median path in ~75s, so the next wave lands while the previous
-  // one's tail is still being finished off — overlap, but not a pile-up. The
-  // failure mode being avoided is compounding: when the gap is shorter than a
-  // wave takes to resolve, the player falls permanently behind and the debt
-  // accumulates, which showed up as "the last wave causes 90% of all losses"
-  // on level after level.
+  // 55s, re-solved after the waves themselves were stretched (see SHAPE in
+  // data/waves.js). With the original nine-second waves this delay had to be
+  // 105s or pressure compounded level-wide; with waves that spawn for ~16-24s
+  // the measured difficulty curve is nearly FLAT from 55s to 105s — the wave's
+  // own duration is doing the pacing — so the shortest fitting value wins and
+  // the dead air between fights goes with it. The failure mode this guards is
+  // compounding: a gap shorter than a wave takes to resolve puts the player
+  // permanently behind, which shows up as "the last wave causes 90% of all
+  // losses" on level after level. 40s starts to show it; 55s does not.
   //
   // Do NOT read this as "build time between waves" and shrink it back toward
   // its old value of 22 — that number was measured from a CLEARED board. Under
@@ -37,7 +39,7 @@ export const CONFIG = {
   // is the one moment the player needs unhurried — reading an unfamiliar map,
   // seeing which towers are unlocked, choosing the first spot — so the battle
   // doesn't begin until they say so. Every wave after that is on the timer.
-  nextWaveDelay: 105,     // seconds from a wave finishing spawning to the next one
+  nextWaveDelay: 55,      // seconds from a wave finishing spawning to the next one
   earlyCallGold: 2,       // gold per whole second saved by calling the wave in
   // ...but only for this many seconds of it. The countdown got about five
   // times longer when waves started overlapping, and the payout rode straight

@@ -62,9 +62,16 @@ function buildLevel(stage, stageIndex, levelInStage) {
   // player's attention and are this campaign's "hard level" shape. The finale
   // (10th) keeps the classic serpentine: the master fights are tuned on it,
   // and its wall-to-wall lanes are the strongest arena for a set-piece boss.
-  const ARCH = { 3: "spiral", 5: "fork", 6: "spiral", 8: "fork", 9: "serpentine" };
+  // Three forks a stage now — they were two, tucked at slots 6 and 9, and the
+  // most-asked question about the campaign was "why don't levels have merged
+  // paths": they did, but a player could reach level 6 without meeting one.
+  const ARCH = { 2: "fork", 3: "spiral", 5: "fork", 6: "spiral", 8: "fork", 9: "serpentine" };
   const archetype = ARCH[levelInStage] || "wander";
-  const map = generateMap(mapSeed(index), { spots, archetype });
+  // Fork maps deal two extra build spots: two roads split the towers'
+  // attention, and the extra ground is most of the compensation (the rest is
+  // the hard-level edge forks are placed for — see FORK_EXPOSURE_BAND).
+  const map = generateMap(mapSeed(index), {
+    spots: spots + (archetype === "fork" ? 2 : 0), archetype });
   const waveCount = Math.round(ramp(CAMPAIGN.waveCount, index));
   const hpScale = Number(band(stage.hpScale, levelInStage).toFixed(2));
 

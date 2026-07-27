@@ -10,7 +10,7 @@ import { CONFIG } from "../config.js";
 import { TOWER_TYPES } from "../data/towerTypes.js";
 import { state, PATH, PATHS, BUILD_SPOTS, LEVEL, THEME, spotOccupied } from "../state.js";
 import { ctx, groundShadow } from "./canvas.js";
-import { paveRoad, scatterProps } from "./scenery.js";
+import { paveRoad, dirtPatch, scatterProps } from "./scenery.js";
 import { drawBackdrop } from "./backdrop.js";
 
 const W = CONFIG.width, H = CONFIG.height;
@@ -78,8 +78,15 @@ function paintScenery() {
   // Secondary routes first, primary last, so where a fork's branches merge the
   // primary's paving sits on top and the joint reads as one road.
   const routes = PATHS.length ? PATHS.map((r) => r.pts) : [PATH];
-  for (let i = routes.length - 1; i >= 0; i--) paveRoad(g, routes[i], THEME);
+  const tight = LEVEL.archetype === "fork" || LEVEL.archetype === "serpentine";
+  for (let i = routes.length - 1; i >= 0; i--)
+    paveRoad(g, routes[i], THEME, tight ? 0.72 : 1);
   scatterProps(g, routes, BUILD_SPOTS, LEVEL.stageId, LEVEL.index + 1);
+
+  // Every build spot's dirt patch, part of the ground itself. A tower built
+  // later stands on its patch; the signpost (drawn live in drawBuildSpots)
+  // disappears, the patch stays.
+  BUILD_SPOTS.forEach((sp, i) => dirtPatch(g, sp.x, sp.y, THEME, LEVEL.index * 100 + i));
 
   // vignette, last, over everything
   const v = g.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.88);
@@ -133,48 +140,50 @@ export function drawBuildSpots() {
   const pulse = 0.5 + 0.5 * Math.sin(performance.now() / 400);
   const affordable = state.gold >= TOWER_TYPES.archer.cost;
 
+  // The patch itself lives in the cached scenery. What's drawn here is the
+  // SIGNPOST — a little wooden post with a white marker, the Kingdom Rush
+  // "build here" grammar — because it has to vanish the moment the spot is
+  // taken, and it glints while a tower is affordable.
   for (const s of BUILD_SPOTS) {
     if (spotOccupied(s)) continue;
-
     ctx.save();
     ctx.translate(s.x, s.y);
 
-    // the hole: dark, with the lip catching light along its lower edge
-    const pit = ctx.createRadialGradient(0, -2, 1, 0, 0, 15);
-    pit.addColorStop(0, "rgba(18,14,8,0.62)");
-    pit.addColorStop(1, "rgba(28,22,12,0.34)");
-    ctx.fillStyle = pit;
+    groundShadow(1, 9, 7, 3);
+    ctx.strokeStyle = "#6b4a24";                       // post
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
     ctx.beginPath();
-    ctx.ellipse(0, 0, 15, 11, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(255,246,220,0.22)";
-    ctx.lineWidth = 1.6;
-    ctx.beginPath();
-    ctx.ellipse(0, 1, 15, 11, 0, 0.15, Math.PI - 0.15);
+    ctx.moveTo(0, 8);
+    ctx.lineTo(0, -8);
     ctx.stroke();
 
-    // four corner footing stones, so it reads as a prepared foundation
-    ctx.fillStyle = "rgba(226,218,198,0.5)";
-    for (const [cx, cy] of [[-12, -6], [12, -6], [-12, 6], [12, 6]]) {
+    const lit = affordable ? 0.9 + 0.1 * pulse : 0.72; // plaque
+    ctx.fillStyle = `rgba(246,240,224,${lit})`;
+    ctx.beginPath();
+    ctx.roundRect(-7, -19, 14, 12, 2);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(50,34,16,0.85)";
+    ctx.lineWidth = 1.4;
+    ctx.stroke();
+
+    // the tower glyph on the plaque, gold while it's actionable
+    ctx.fillStyle = affordable
+      ? `rgba(169,118,42,${0.8 + 0.2 * pulse})`
+      : "rgba(120,110,92,0.8)";
+    ctx.fillRect(-2.6, -16.5, 5.2, 6);
+    ctx.fillRect(-3.8, -17.6, 2, 2);
+    ctx.fillRect(-1, -17.6, 2, 2);
+    ctx.fillRect(1.8, -17.6, 2, 2);
+
+    if (affordable) {                                  // soft ready-glint
+      ctx.strokeStyle = `rgba(255,207,82,${0.25 + 0.3 * pulse})`;
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(cx - 3, cy - 2.5, 6, 5, 1.2);
-      ctx.fill();
+      ctx.ellipse(0, 2, 24, 17, 0, 0, Math.PI * 2);
+      ctx.stroke();
     }
     ctx.restore();
-
-    // gold ring + plus while you can afford to build, quiet grey when you can't
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, 18, 0, Math.PI * 2);
-    ctx.setLineDash([5, 5]);
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = affordable ? `rgba(255,207,82,${0.55 + 0.4 * pulse})` : "rgba(210,204,186,0.2)";
-    ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = affordable ? `rgba(255,222,130,${0.75 + 0.25 * pulse})` : "rgba(214,208,190,0.4)";
-    ctx.font = "bold 17px system-ui, sans-serif";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText("+", s.x, s.y);
   }
 }
 

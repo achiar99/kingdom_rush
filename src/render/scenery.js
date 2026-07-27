@@ -30,73 +30,154 @@ function rng(seed) {
 // width, each with its own tint and a mortar gap around it. Because they're
 // oriented to the curve, the paving bends with the road instead of tiling over
 // the top of it.
-export function paveRoad(g, path, theme) {
+// The road: a broad dirt swathe with a ragged grass fringe, the Kingdom Rush
+// silhouette. Three things make that read, and the old paved ribbon had none
+// of them: real WIDTH (a swathe, not a lane), an IRREGULAR edge — the width
+// breathes along the route and grass tufts bite into it, so no stretch of
+// verge is a clean spline — and a soft inner highlight where feet have worn
+// the middle. All of it still tints from the theme, so snow roads stay
+// grey-blue and Othrys roads stay ash.
+//
+// Built as offset polygons from dense samples rather than strokes, because a
+// stroke has one width for its whole length and the whole point is that this
+// road doesn't.
+export function paveRoad(g, path, theme, widthScale = 1) {
   const len = pathLength(path);
+  const STEP = 9;
 
-  const stroke = (width, color, dash = null) => {
-    g.save();
-    g.lineJoin = "round";
-    g.lineCap = "round";
-    g.strokeStyle = color;
-    g.lineWidth = width;
-    if (dash) g.setLineDash(dash);
+  // Deterministic per-route phase so two routes on a fork don't wobble in sync.
+  const ph = (path[0].x * 13.37 + path[0].y * 7.91) % 6.283;
+  // 26px half-width. At 30 the swathe plus its fringe painted ~74px, and the
+  // wander generator only guarantees ~85px between corridors — parallel roads
+  // visibly merged into sand lakes. Width has to respect the generator's
+  // clearance floor, not just the reference art. `widthScale` extends the same
+  // rule to the other shapes: fork and serpentine lanes run as close as ~45px,
+  // so those maps paint the road at 0.72 of this.
+  const halfW = (d) =>
+    26 * widthScale *
+    (1 + 0.10 * Math.sin(d * 0.021 + ph) + 0.07 * Math.sin(d * 0.049 + ph * 2.7));
+
+  // sample centreline + normals once
+  const C = [], N = [], WD = [];
+  for (let d = 0; d <= len; d += STEP) {
+    const p = pointAtDistance(path, len, d);
+    const q = pointAtDistance(path, len, Math.min(len, d + 4));
+    const dx = q.x - p.x, dy = q.y - p.y;
+    const m = Math.hypot(dx, dy) || 1;
+    C.push(p);
+    N.push({ x: -dy / m, y: dx / m });
+    WD.push(halfW(d));
+  }
+
+  const ribbon = (scale, extra = 0) => {
     g.beginPath();
-    g.moveTo(path[0].x, path[0].y);
-    for (let i = 1; i < path.length; i++) g.lineTo(path[i].x, path[i].y);
-    g.stroke();
-    g.restore();
+    for (let i = 0; i < C.length; i++) {
+      const w = WD[i] * scale + extra;
+      const x = C[i].x + N[i].x * w, y = C[i].y + N[i].y * w;
+      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+    }
+    for (let i = C.length - 1; i >= 0; i--) {
+      const w = WD[i] * scale + extra;
+      g.lineTo(C[i].x - N[i].x * w, C[i].y - N[i].y * w);
+    }
+    g.closePath();
   };
 
-  // drop shadow, then the verge, then the bed the slabs sit in
-  g.save();
-  g.translate(0, 3);
-  stroke(48, "rgba(0,0,0,0.28)");
-  g.restore();
-  stroke(50, "rgba(0,0,0,0.10)");          // soft blend into the ground
-  stroke(46, theme.path.rim);              // earth verge
-  stroke(38, theme.path.body);             // mortar bed
+  // dark grass fringe, then the dirt body, then the worn middle
+  g.fillStyle = mix(theme.grass[1], "#000000", 0.25);
+  ribbon(1, 5.5);
+  g.fill();
+  g.fillStyle = theme.path.rim;
+  ribbon(1, 1.5);
+  g.fill();
+  g.fillStyle = theme.path.body;
+  ribbon(1);
+  g.fill();
+  g.globalAlpha = 0.5;
+  g.fillStyle = theme.path.track;
+  ribbon(0.52);
+  g.fill();
+  g.globalAlpha = 1;
 
-  // The slabs. Everything is sized to stay inside the 38px mortar bed — three
-  // across at ±11 with an 11px face reaches ±16.5, so the darker bed still
-  // shows through as joints and the verge is never buried.
-  const rand = rng(9173);
-  const STEP = 15;
-  for (let d = 0, row = 0; d < len; d += STEP, row++) {
-    const p = pointAtDistance(path, len, d);
-    const q = pointAtDistance(path, len, Math.min(len, d + 3));
-    const ang = Math.atan2(q.y - p.y, q.x - p.x);
-    // Stagger alternate rows so the joints don't line up into a grid.
-    const lanes = row % 2 ? [-5.8, 5.8] : [-11.6, 0, 11.6];
-    for (const off of lanes) {
-      const r1 = rand(), r2 = rand(), r3 = rand();
-      g.save();
-      g.translate(p.x + Math.cos(ang + Math.PI / 2) * off,
-                  p.y + Math.sin(ang + Math.PI / 2) * off);
-      g.rotate(ang + (r1 - 0.5) * 0.12);
-      const across = (row % 2 ? 10.4 : 9.8) + r2 * 1.4;
-      const along = STEP - 3 + r3 * 1.6;
-      // Slab face, tinted between the road's body and its brightest track
-      // colour. Weighted well toward the darker end: the road has to be
-      // legible, but it should not be the brightest thing on the field or it
-      // pulls the eye off the towers and the creeps walking on it.
-      g.fillStyle = mix(theme.path.body, theme.path.track, 0.04 + r2 * 0.32);
+  // grass tufts biting into the verge — the scalloped edge that makes it read
+  // as ground and not as a drawn line
+  const rand = rng(9173 + ((path[0].x | 0) << 3));
+  g.fillStyle = theme.grass[1];
+  for (let i = 2; i < C.length - 2; i += 2) {
+    if (rand() < 0.35) continue;
+    for (const side of [-1, 1]) {
+      if (rand() < 0.3) continue;
+      const w = WD[i] + 4;
+      const tx = C[i].x + N[i].x * w * side + (rand() - 0.5) * 4;
+      const ty = C[i].y + N[i].y * w * side + (rand() - 0.5) * 4;
+      const rr = 2.5 + rand() * 4.5;
       g.beginPath();
-      g.roundRect(-along / 2, -across / 2, along, across, 1.8);
+      // squash the tuft along the road direction so the edge scallops
+      g.ellipse(tx, ty, rr * 1.5, rr, Math.atan2(N[i].x, -N[i].y), 0, Math.PI * 2);
       g.fill();
-      // lit top edge and shaded lower edge give each slab a little thickness
-      g.fillStyle = "rgba(255,252,240,0.09)";
-      g.fillRect(-along / 2 + 1, -across / 2, along - 2, 1);
-      g.fillStyle = "rgba(40,26,10,0.17)";
-      g.fillRect(-along / 2 + 1, across / 2 - 1, along - 2, 1);
-      g.restore();
     }
   }
 
-  // Wheel ruts worn down the middle by ten years of supply carts.
-  stroke(3, "rgba(60,40,16,0.13)", [26, 20]);
+  // speckles and the odd pebble worn into the dirt
+  for (let i = 1; i < C.length - 1; i += 3) {
+    if (rand() < 0.4) continue;
+    const off = (rand() * 2 - 1) * WD[i] * 0.7;
+    const px = C[i].x + N[i].x * off, py = C[i].y + N[i].y * off;
+    if (rand() < 0.85) {
+      g.fillStyle = `rgba(70,50,26,${0.10 + rand() * 0.12})`;
+      g.beginPath();
+      g.arc(px, py, 1.2 + rand() * 2, 0, Math.PI * 2);
+      g.fill();
+    } else {
+      g.fillStyle = mix(theme.path.rim, "#888078", 0.5);
+      g.beginPath();
+      g.ellipse(px, py, 2.6, 1.8, rand() * 3, 0, Math.PI * 2);
+      g.fill();
+      g.fillStyle = "rgba(255,255,255,0.25)";
+      g.beginPath();
+      g.arc(px - 0.7, py - 0.6, 0.9, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
 }
 
-// ------------------------------------------------------------------ props
+// A build spot's ground: a bare dirt patch off the road, fringed like the road
+// itself. Painted into the cached scenery — a tower built later simply stands
+// on its patch, which is exactly how it should look.
+export function dirtPatch(g, x, y, theme, seed) {
+  const rand = rng(seed * 7919 + 13);
+  const rot = rand() * 3.14;
+  g.save();
+  g.translate(x, y);
+  g.rotate(rot);
+  const blob = (rx, ry, colour, alpha = 1) => {
+    g.globalAlpha = alpha;
+    g.fillStyle = colour;
+    g.beginPath();
+    for (let i = 0; i <= 14; i++) {
+      const a = (i / 14) * Math.PI * 2;
+      const wob = 1 + 0.1 * Math.sin(a * 3 + seed) + 0.07 * Math.sin(a * 5 + seed * 2);
+      const px = Math.cos(a) * rx * wob, py = Math.sin(a) * ry * wob;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fill();
+    g.globalAlpha = 1;
+  };
+  blob(27, 21, mix(theme.grass[1], "#000000", 0.25));
+  blob(24.5, 18.5, theme.path.rim);
+  blob(22, 16, theme.path.body);
+  blob(13, 9, theme.path.track, 0.45);
+  g.fillStyle = `rgba(70,50,26,0.14)`;
+  for (let i = 0; i < 5; i++) {
+    g.beginPath();
+    g.arc((rand() - 0.5) * 30, (rand() - 0.5) * 20, 1.2 + rand() * 1.6, 0, Math.PI * 2);
+    g.fill();
+  }
+  g.restore();
+}
+
+// ------------------------------------------------------------------ props// ------------------------------------------------------------------ props
 // Each is drawn at its own scale around (0,0) with the ground line at y=0, so
 // the scatter below can place them without knowing anything about them.
 

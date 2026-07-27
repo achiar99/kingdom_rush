@@ -17,7 +17,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Worker } from "node:worker_threads";
-import { STAGES, LEVELS_PER_STAGE } from "../../src/data/stages.js";
+import { STAGES, LEVELS_PER_STAGE, goldForHpScale } from "../../src/data/stages.js";
 import { LEVELS } from "../../src/data/levels.js";
 import { targetWinRate, pct } from "./analyze.js";
 import { DEFAULT_DT } from "./harness.js";
@@ -51,7 +51,14 @@ async function solveHpScale(levelIndex, target, log) {
     const sum = await runCell({
       levelIndex, skill: "average", trials: TRIALS, seed0: 1,
       difficulty: "normal", hero: "achilles", upgrades: {}, dt: DEFAULT_DT,
-      levelOverrides: { hpScale: Number(mid.toFixed(3)) },
+      // startGold must move WITH hpScale, exactly as data/levels.js derives
+      // it. Overriding hpScale alone probes a world where the enemy shrank
+      // but the purse stayed — every downward probe measured too easy, and
+      // the fitter systematically overshot. (Found when a fitted endpoint
+      // reported 50% and the same level, with the band actually applied and
+      // the purse recomputed, measured 8-14%.)
+      levelOverrides: { hpScale: Number(mid.toFixed(3)),
+                        startGold: goldForHpScale(Number(mid.toFixed(3))) },
     });
     const gap = Math.abs(sum.winRate - target);
     if (gap < best.gap) best = { value: mid, gap, rate: sum.winRate };

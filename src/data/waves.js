@@ -10,7 +10,7 @@
 // Waves name ROLES, never creatures. The stage's kit decides what actually
 // walks down the road — see data/enemyKits.js.
 import { ROLES } from "./enemyKits.js";
-import { LEVELS_PER_STAGE, stageProgress } from "./stages.js";
+import { LEVELS_PER_STAGE, STAGES, stageProgress } from "./stages.js";
 
 // mulberry32, seeded per level so a level's waves never change under a player.
 function rng(seed) {
@@ -42,17 +42,22 @@ const INTRO_LATER = {
 
 // Spawn gap and squad size per role — a runner rush is twenty creeps a third
 // of a second apart; brutes come in threes with a long beat between them.
+// Gaps ~1.5x and counts ~1.2x their original values. The first cut of these
+// numbers made a wave a nine-second burst followed by a hundred seconds of
+// nothing — all wait, no battle. A wave should OCCUPY its slot: these spawn
+// for roughly twenty seconds, and the between-wave delay (CONFIG.nextWaveDelay)
+// is solved against the target curve for this shape, not the old one.
 const SHAPE = {
-  swarm:     { gap: [0.9, 0.5],   count: [6, 12] },
-  swift:     { gap: [0.42, 0.24], count: [6, 16] },
-  shielded:  { gap: [0.8, 0.45],  count: [4, 10] },
-  brute:     { gap: [1.5, 0.85],  count: [2, 6] },
-  winged:    { gap: [0.7, 0.36],  count: [4, 12] },
-  warded:    { gap: [0.85, 0.5],  count: [4, 9] },
-  stormborn: { gap: [0.95, 0.55], count: [3, 7] },
-  brood:     { gap: [1.0, 0.6],   count: [3, 7] },   // each becomes three
-  revenant:  { gap: [1.1, 0.7],   count: [2, 6] },
-  champion:  { gap: [3.0, 1.6],   count: [1, 3] },
+  swarm:     { gap: [1.35, 0.75], count: [7, 14] },
+  swift:     { gap: [0.63, 0.36], count: [7, 19] },
+  shielded:  { gap: [1.2, 0.68],  count: [5, 12] },
+  brute:     { gap: [2.25, 1.28], count: [2, 7] },
+  winged:    { gap: [1.05, 0.54], count: [5, 14] },
+  warded:    { gap: [1.28, 0.75], count: [5, 11] },
+  stormborn: { gap: [1.43, 0.83], count: [4, 8] },
+  brood:     { gap: [1.5, 0.9],   count: [4, 8] },   // each becomes three
+  revenant:  { gap: [1.65, 1.05], count: [2, 7] },
+  champion:  { gap: [4.5, 2.4],   count: [1, 3] },
 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
@@ -73,7 +78,10 @@ function availableRoles(stageIndex, levelInStage) {
 // of every stage — far more so than the master's own HP. At 0.7 the Stage V
 // finale sat at 21% for ANY master HP from 2500 to 11000; at 0.35 it hits its
 // 40% target. See the note at the thinning site.
-export const MASTER_ESCORT = 0.35;
+// Per-stage since the waves were lengthened: the Stage V finale's escort is
+// the binding constraint on that level — Kronos measured a flat 28% win rate
+// at ANY health from 5500 to 10000, so his health is not the knob that turns.
+export const MASTER_ESCORT = { troy: 0.35, arcadia: 0.35, labyrinth: 0.35, hades: 0.35, olympus: 0.24 };
 
 // One level's worth of waves.
 //
@@ -184,9 +192,10 @@ export function generateWaves(opts) {
     // This factor, not the master's HP, is what decides the late finales. With
     // the master dropped to 2500 — weaker than an ordinary champion — Stage IV
     // still measured 46% and Stage V 21%, so the escort alone was losing them.
+    const escort = MASTER_ESCORT[STAGES[stageIndex].kit] ?? 0.35;
     for (const g of finale.groups) {
       if (g.type === "master") continue;
-      g.count = Math.max(1, Math.round(g.count * MASTER_ESCORT));
+      g.count = Math.max(1, Math.round(g.count * escort));
     }
     void stageIndex; void waveCount;
   }

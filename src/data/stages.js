@@ -140,7 +140,7 @@ export const STAGES = [
     // happily report an enormous first-level value that "still wins 100%".
     // That is not a difficulty reading — it means hpScale barely controls
     // difficulty there at all. Take those with judgement.
-    hpScale: [1.0, 1.6],
+    hpScale: [1.0, 1.3],
     icon: "🛡️",
   },
   {
@@ -148,7 +148,7 @@ export const STAGES = [
     blurb: "Past the last olive terrace, older things are still awake.",
     kit: "arcadia",
     themes: ["olive", "arkadia", "alpheios"],
-    hpScale: [2.9, 1.6],
+    hpScale: [1.9, 1.3],
     icon: "🌿",
   },
   {
@@ -156,7 +156,7 @@ export const STAGES = [
     blurb: "Every corridor doubles back. Something is counting your turns.",
     kit: "labyrinth",
     themes: ["idaSnow", "frostwood", "glacier"],
-    hpScale: [5.5, 5.2],
+    hpScale: [3.7, 4.9],
     icon: "🐂",
   },
   {
@@ -164,7 +164,7 @@ export const STAGES = [
     blurb: "The dead are many, and they are no longer resting.",
     kit: "hades",
     themes: ["asphodel", "greyreach", "stygian"],
-    hpScale: [6.0, 8.1],
+    hpScale: [3.8, 5.7],
     icon: "💀",
   },
   {
@@ -172,7 +172,7 @@ export const STAGES = [
     blurb: "What the gods buried is climbing back up the mountain.",
     kit: "olympus",
     themes: ["othrys", "emberwaste", "shadowpeak"],
-    hpScale: [3.6, 5.8],
+    hpScale: [2.8, 3.5],
     icon: "⚡",
   },
 ];
