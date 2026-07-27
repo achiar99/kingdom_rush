@@ -30,6 +30,7 @@
   import { ctx } from "../src/render/canvas.js";
   import { drawEnemy } from "../src/render/monsters.js";
   import { drawTower } from "../src/render/towers.js";
+  import { drawProjectile, drawEffect } from "../src/render/effects.js";
   import { drawHero, drawSoldier } from "../src/render/units.js";
   import { HEROES } from "../src/data/hero.js";
   import { makeHero } from "../src/entities.js";
@@ -43,7 +44,7 @@
   // view for judging whether any single one is actually drawn well, because a
   // twelve-pixel creep in a 1500px sheet is unreadable. Focus mode is for that.
   //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters
-  //   ?focus=towers | levels | heroes
+  //   ?focus=towers | levels | heroes | shots
   const PARAMS = new URLSearchParams(location.search);
   const FOCUS = PARAMS.get("focus");
   // ?zoom=N and ?only=<type> for close inspection of a single tower
@@ -58,6 +59,57 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, x, y);
+  }
+
+  // What each tower throws, plus the mark it leaves. Projectiles live for a
+  // fraction of a second in play, so the only practical way to judge them is a
+  // static sheet with the flight frozen part-way along.
+  function drawShotSheet() {
+    ctx.clearRect(0, 0, 1500, 1120);
+    const SHOTS = [
+      { kind: "archer", spec: null, color: "#ffe27a", label: "Toxotai — arrow" },
+      { kind: "archer", spec: "cretan", color: "#ffe27a", label: "Cretan — arrow" },
+      { kind: "archer", spec: "amazon", color: "#ffe27a", label: "Amazon — long shaft" },
+      { kind: "artillery", spec: null, color: "#e8a057", label: "Ballista — boulder" },
+      { kind: "artillery", spec: "siege", color: "#e8a057", label: "Siege — heavy boulder" },
+      { kind: "artillery", spec: "scorpion", color: "#e8a057", label: "Scorpion — iron bolt" },
+      { kind: "magic", spec: null, color: "#c8f0ff", label: "Oracle — arcane mote" },
+      { kind: "magic", spec: "delphi", color: "#c8f0ff", label: "Delphi — arcane mote" },
+      { kind: "magic", spec: "hekate", color: "#e0a8ff", label: "Hekate — dark mote" },
+    ];
+    const FX = [
+      { kind: "sparks", color: "#ffe27a", maxR: 13, label: "arrow / bolt strike" },
+      { kind: "rubble", color: "#ffb057", maxR: 48, label: "boulder impact" },
+      { kind: "arcane", color: "#c8f0ff", maxR: 60, label: "arcane burst" },
+    ];
+    const CW = 1500 / 3, RH = 210, Z = ZOOM_OVERRIDE || 4;
+    SHOTS.forEach((sh, i) => {
+      const cx = (i % 3) * CW + CW / 2, cy = Math.floor(i / 3) * RH + 150;
+      // A stand-in flight: launched to the left, aimed right, half way there.
+      const p = { ...sh, x: cx, y: cy, attack: sh.kind === "artillery" ? "splash" : "single",
+                  x0: cx - 60, y0: cy, flight: 120, target: { x: cx + 60, y: cy } };
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(Z, Z);
+      ctx.translate(-cx, -cy);
+      drawProjectile(p);
+      ctx.restore();
+      label(sh.label, cx, cy + 62, "#e8ecf4", 13, 700);
+    });
+    FX.forEach((f, i) => {
+      const cx = i * CW + CW / 2, cy = 3 * RH + 190;
+      // mid-fade, where an effect actually spends most of its life
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(2.2, 2.2);
+      ctx.translate(-cx, -cy);
+      // life/maxLife literal, not derived from f: reading f.maxLife before it
+      // exists made the radius NaN, and createRadialGradient throws on that,
+      // which silently killed the rest of this loop.
+      drawEffect({ ...f, x: cx, y: cy, life: 0.55, maxLife: 1 });
+      ctx.restore();
+      label(f.label, cx, cy + 96, "#ffcf52", 13, 700);
+    });
   }
 
   // Each tower at all three levels, side by side. Upgrades are supposed to be
@@ -175,6 +227,7 @@
   function draw() {
     if (FOCUS === "towers") return drawTowerSheet();
     if (FOCUS === "levels") return drawLevelSheet();
+    if (FOCUS === "shots") return drawShotSheet();
     if (FOCUS === "heroes") return drawHeroSheet();
     if (FOCUS) return drawFocus();
     ctx.clearRect(0, 0, 1500, 1120);

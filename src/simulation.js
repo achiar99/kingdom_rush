@@ -255,6 +255,11 @@ export function update(dt) {
         attack: t.def.attack, splashRadius: t.splashRadius || 0,
         magic: t.def.key === "magic", hitsAir: t.hitsAir, dead: false,
         chain: t.chain || 0, slow: t.slow, dot: t.dot, airBonus: t.airBonus || 1,
+        // What fired it, and from where. render/effects.js needs the first to
+        // pick a shape — an arrow, a boulder, a bolt, an arcane mote — and the
+        // second to lob artillery along a visual arc.
+        kind: t.type, spec: t.spec || null,
+        x0: t.x, y0: t.y - 7, flight: dist(t.x, t.y - 7, target.x, target.y),
       });
       t.cooldown = 1 / t.fireRate;
     }
@@ -379,7 +384,8 @@ function onProjectileHit(p) {
     applyHit(p, p.target);
     for (const e of nearestOthers(p.target.x, p.target.y, p.chain - 1, p.target, p.hitsAir))
       if (dist(p.target.x, p.target.y, e.x, e.y) <= 120) applyHit(p, e);
-    state.effects.push({ x: p.target.x, y: p.target.y, maxR: 60, life: 0.25, maxLife: 0.25, color: p.color });
+    state.effects.push({ x: p.target.x, y: p.target.y, maxR: 60, life: 0.25,
+      maxLife: 0.25, color: p.color, kind: "arcane" });
     return;
   }
   if (p.attack === "splash") {
@@ -392,9 +398,16 @@ function onProjectileHit(p) {
       if (e.flying && !p.hitsAir) continue;
       applyHit(p, e);
     }
-    state.effects.push({ x: ix, y: iy, maxR: p.splashRadius, life: 0.35, maxLife: 0.35, color: "#ffb057" });
+    state.effects.push({ x: ix, y: iy, maxR: p.splashRadius, life: 0.4, maxLife: 0.4,
+      color: "#ffb057", kind: p.spec === "scorpion" ? "sparks" : "rubble" });
   } else {
     const dealt = applyHit(p, p.target);
+    // A small mark where it struck. Without this an arrow simply vanished into
+    // the creep and there was no feedback that anything had connected.
+    state.effects.push({
+      x: p.target.x, y: p.target.y, maxR: 13, life: 0.18, maxLife: 0.18,
+      color: p.color, kind: p.magic ? "arcane" : "sparks",
+    });
     // ranged heroes earn their XP when the arrow/bolt actually lands
     if (p.fromHero && state.hero)
       awardHeroXp(state.hero, dealt + (p.target.dead ? p.target.reward : 0));
@@ -630,6 +643,9 @@ function updateHero(dt) {
           speed: def.projectileSpeed, color: def.projColor,
           attack: "single", splashRadius: 0, magic: !!def.magic,
           hitsAir: true, fromHero: true, dead: false,
+          // A champion shoots what they carry: Atalanta an arrow, Circe a mote.
+          kind: def.magic ? "magic" : "archer", spec: null,
+          x0: hero.x, y0: hero.y - 10, flight: dist(hero.x, hero.y - 10, best.x, best.y),
         });
         hero.shootCd = def.attackInterval;
       }
