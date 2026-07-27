@@ -85,6 +85,200 @@ function skeleton(rand, lanes) {
   return pts;
 }
 
+// An organic wandering road — the Kingdom Rush look. The serpentine's tell is
+// that every crossing is horizontal and wall-to-wall; a real map's road hooks,
+// staircases, doubles back, and enters and leaves on whatever edges it likes.
+//
+// The generator is a SELF-AVOIDING WALK on a coarse grid: entry and exit cells
+// on two different edges, a randomized depth-first search for a route between
+// them that visits at least `minCells` cells, then the cell centres (jittered)
+// become spline control points. Self-avoidance on the grid is what guarantees
+// the road never crosses itself and parallel corridors keep a full cell of
+// clearance — properties the serpentine got from its lane structure, kept here
+// without the lanes.
+function wanderSkeleton(rand) {
+  const COLS = 7, ROWS = 4;
+  const cw = W / COLS, ch = H / ROWS;
+  const idx = (c, r) => r * COLS + c;
+
+  // entry and exit on two different edges, never adjacent corners
+  const edgeCells = {
+    left: Array.from({ length: ROWS }, (_, r) => [0, r]),
+    right: Array.from({ length: ROWS }, (_, r) => [COLS - 1, r]),
+    top: Array.from({ length: COLS }, (_, c) => [c, 0]),
+    bottom: Array.from({ length: COLS }, (_, c) => [c, ROWS - 1]),
+  };
+  const edges = Object.keys(edgeCells);
+  const e1 = edges[Math.floor(rand() * 4)];
+  let e2 = edges[Math.floor(rand() * 4)];
+  while (e2 === e1) e2 = edges[Math.floor(rand() * 4)];
+  const pick = (edge) => edgeCells[edge][Math.floor(rand() * edgeCells[edge].length)];
+  const start = pick(e1), goal = pick(e2);
+
+  // randomized DFS for a self-avoiding path of at least minCells cells
+  const minCells = 22;
+  const visited = new Uint8Array(COLS * ROWS);
+  const walk = [];
+  let calls = 0;
+  const dfs = (c, r) => {
+    if (++calls > 30000) return false;             // determinism-safe bailout
+    visited[idx(c, r)] = 1;
+    walk.push([c, r]);
+    if (c === goal[0] && r === goal[1] && walk.length >= minCells) return true;
+    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
+      .map((d) => ({ d, k: rand() }))
+      .sort((a, b) => a.k - b.k)
+      .map((o) => o.d);
+    for (const [dc, dr] of dirs) {
+      const nc = c + dc, nr = r + dr;
+      if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) continue;
+      if (visited[idx(nc, nr)]) continue;
+      if (dfs(nc, nr)) return true;
+    }
+    visited[idx(c, r)] = 0;
+    walk.pop();
+    return false;
+  };
+  if (!dfs(start[0], start[1])) return null;       // caller tries the next seed
+
+  // cells -> jittered control points, plus off-screen extensions at both ends
+  const centre = ([c, r]) => ({
+    x: Math.round((c + 0.5) * cw + (rand() - 0.5) * cw * 0.34),
+    y: Math.round((r + 0.5) * ch + (rand() - 0.5) * ch * 0.34),
+  });
+  const pts = walk.map(centre);
+  // Top-edge roads barely leave the world: the sky band sits directly above
+  // it on the canvas, and a full 30px extension would have creeps marching
+  // over the mountains before they reach the field. 8px keeps the spawn just
+  // behind the horizon's fade.
+  const off = (edge, p) =>
+    edge === "left" ? { x: -30, y: p.y } : edge === "right" ? { x: W + 30, y: p.y }
+    : edge === "top" ? { x: p.x, y: -8 } : { x: p.x, y: H + 30 };
+  pts.unshift(off(e1, pts[0]));
+  pts.push(off(e2, pts[pts.length - 1]));
+  return pts;
+}
+
+// A rectangular spiral coiling inward, the temple at its heart. The same few
+// control-point tricks as the serpentine — bowed legs, rounded corners — but
+// the geometry says something different: the whole map wraps around the thing
+// you are defending, and the creeps close in from every side as they walk.
+function spiralSkeleton(rand) {
+  const m = 54 + Math.round(rand() * 8);          // outer margin
+  const g = 88 + Math.round(rand() * 14);         // gap between coils
+  const mirrored = rand() < 0.5;                  // enter left or right
+  const flipped = rand() < 0.5;                   // clockwise or counter
+  const X = (x) => (mirrored ? W - x : x);
+  const Y = (y) => (flipped ? H - y : y);
+  const bow = 13;                                 // small: coils must not touch
+
+  const pts = [{ x: X(-30), y: Y(m) }];
+  // Each entry: [corner-x, corner-y] in unmirrored space; legs between corners
+  // get one bowed midpoint so the coil breathes without risking a collision.
+  const corners = [
+    [W - m, m], [W - m, H - m], [m, H - m], [m, m + g],
+    [W - m - g, m + g], [W - m - g, H - m - g], [m + g, H - m - g], [m + g, m + 2 * g],
+    [W / 2, m + 2 * g],
+  ];
+  let prev = pts[0];
+  for (const [cx, cy] of corners) {
+    const c = { x: X(cx), y: Y(cy) };
+    pts.push({
+      x: Math.round((prev.x + c.x) / 2 + (rand() - 0.5) * 2 * bow * (prev.x === c.x ? 1 : 0)),
+      y: Math.round((prev.y + c.y) / 2 + (rand() - 0.5) * 2 * bow * (prev.y === c.y ? 1 : 0)),
+    });
+    pts.push(c);
+    prev = c;
+  }
+  // the last step into the heart, where the temple stands
+  pts.push({ x: X(W / 2), y: Y(m + 2 * g + 42) });
+  return pts;
+}
+
+// Two armies, one gate: a pair of roads that enter separately, serpentine
+// through their own halves of the field, and MERGE into a single shared road
+// to the temple. Returns two full control-point routes whose tails are the
+// same points — each is smoothed into its own polyline, and a creep walks one
+// or the other.
+//
+// This is the "hard level" shape: until the merge your towers can only ever
+// see half the traffic, and the ground that watches both branches at once —
+// around the merge and along the shared tail — is suddenly the most valuable
+// real estate on the map.
+function forkSkeleton(rand) {
+  // Seven heights: three lanes per branch, the merge lane dead centre. Two
+  // crossings per branch measured ~2,550px per route, and at that length the
+  // exposure band is unreachable no matter where the spots go — each creep
+  // simply isn't on the road long enough. Three crossings brings a route back
+  // to ~3,400px, inside what the campaign's difficulty math assumes.
+  const m = 52;
+  const gap = (H - m * 2) / 6;
+  const ys = [];
+  for (let i = 0; i < 7; i++) ys.push(Math.round(m + i * gap + (rand() - 0.5) * gap * 0.2));
+  const mirrored = rand() < 0.5;
+  const X = (x) => (mirrored ? W - x : x);
+  const bow = Math.min(12, gap * 0.16);           // lanes sit close; keep them apart
+  // Crossings run as wide as the hairpins allow: every pixel of width is route
+  // length, and route length is exposure the band needs. (Was W-120-160 /
+  // 96-136, which left the weak route ~10% under the band with no spot layout
+  // able to close the gap.)
+  const farX = W - 100 - Math.round(rand() * 22);
+  const nearX = 78 + Math.round(rand() * 22);
+
+  // one serpentine crossing with two bowed waypoints, matching the main
+  // skeleton's lane shape
+  const lane = (pts, fromX, toX, y) => {
+    for (const f of [0.34, 0.68])
+      pts.push({ x: Math.round(X(fromX + (toX - fromX) * f)),
+                 y: Math.round(y + (rand() - 0.5) * 2 * bow) });
+    pts.push({ x: X(toX), y });
+  };
+  const turn = (pts, x, yFrom, yTo, dir) => {
+    pts.push({ x: X(x + dir * (26 + rand() * 30)), y: Math.round((yFrom + yTo) / 2) });
+    pts.push({ x: X(x), y: yTo });
+  };
+
+  // The merge sits left of centre, midway between the two inner lanes. The
+  // shared road then runs ONE full crossing and exits on the far side — an
+  // earlier version gave it a second crossing back through the middle, and
+  // that lane unavoidably crossed whichever branch was climbing into the
+  // merge (measured: routes 6px apart, i.e. a road drawn over a road).
+  const midY = ys[3];
+  // The merge sits at the FAR turn, and the shared road runs back across the
+  // middle to exit on the entry side. Crucially the shared segment is ONE
+  // control-point array reused by both routes — an earlier version gave each
+  // branch its own copy of the final crossing, and since every lane gets its
+  // own random bows, the two roads overlapped as a wobbling ±12px braid.
+  const M = { x: X(farX), y: midY };
+
+  // branch A: enters top-left, three crossings in the top band, down into M
+  const A = [{ x: X(-30), y: ys[0] }];
+  lane(A, -30, farX, ys[0]);
+  turn(A, farX, ys[0], ys[1], 1);
+  lane(A, farX, nearX, ys[1]);
+  turn(A, nearX, ys[1], ys[2], -1);
+  lane(A, nearX, farX, ys[2]);
+  turn(A, farX, ys[2], midY, 1);
+
+  // branch B: enters bottom-left, three crossings in the bottom band, up into M
+  const B = [{ x: X(-30), y: ys[6] }];
+  lane(B, -30, farX, ys[6]);
+  turn(B, farX, ys[6], ys[5], 1);
+  lane(B, farX, nearX, ys[5]);
+  turn(B, nearX, ys[5], ys[4], -1);
+  lane(B, nearX, farX, ys[4]);
+  turn(B, farX, ys[4], midY, 1);
+
+  // the shared road: one crossing from the merge back out the entry side
+  const shared = [M];
+  lane(shared, farX, -30, midY);
+
+  return [
+    [...A, ...shared],
+    [...B, ...shared],
+  ];
+}
+
 // Centripetal Catmull-Rom through the control points, tessellated into a dense
 // polyline. Centripetal (alpha = 0.5) rather than uniform because uniform
 // splines overshoot and form cusps exactly where this road turns hardest — the
@@ -135,13 +329,18 @@ function smooth(control, step = 13) {
 // Candidates on a coarse grid, filtered to the band beside the road — close
 // enough that a tower's range reaches it, far enough that the tower isn't
 // sitting in the middle of the street.
-function candidateSpots(path, rand) {
+function candidateSpots(routes, rand) {
   const NEAR = 34, FAR = 104;
   const out = [];
   for (let x = 46; x <= W - 46; x += 26) {
     for (let y = 46; y <= H - 40; y += 26) {
-      const on = nearestPointOnPath(path, x, y);
-      const d = dist(x, y, on.x, on.y);
+      // distance to the closest of ALL routes — a spot in a fork's median that
+      // is too near branch A is still in the street, whatever branch B thinks
+      let d = Infinity;
+      for (const r of routes) {
+        const on = nearestPointOnPath(r, x, y);
+        d = Math.min(d, dist(x, y, on.x, on.y));
+      }
       if (d < NEAR || d > FAR) continue;
       out.push({ x: Math.round(x + (rand() - 0.5) * 10), y: Math.round(y + (rand() - 0.5) * 10) });
     }
@@ -168,9 +367,12 @@ function samplePath(path, step = 10) {
 // Greedily take the best-covering candidate, then forbid its neighbourhood so
 // towers spread along the whole route instead of clumping on the one hot
 // corner. That spread is what makes the *whole* map matter.
-function pickSpots(path, rand, count) {
-  const samples = samplePath(path);
-  const cands = candidateSpots(path, rand);
+function pickSpots(routes, rand, count) {
+  // Coverage is scored over every route's samples together. On a fork the
+  // shared tail appears once per route, so ground that watches it counts
+  // double — which is exactly right, because every creep on the map walks it.
+  const samples = routes.flatMap((r) => samplePath(r));
+  const cands = candidateSpots(routes, rand);
   const MIN_APART = 74;
   const chosen = [];
   const scored = cands.map((c) => ({
@@ -220,29 +422,56 @@ export function exposurePerSpot(path, spots, range = 130) {
 // come from the shape of the route, not from whether it's defensible.
 export const EXPOSURE_BAND = [495, 545];
 
+// Forks get a lower floor, on purpose and after measuring the alternative.
+// With three crossings per branch — the most road the geometry can hold
+// without lanes touching — the weaker route tops out around 470-485: ground
+// that watches branch A is ground that isn't watching branch B, and no spot
+// layout closes that. So a fork map is inherently ~5-8% less defended per
+// creep than a serpentine, and this band admits that honestly rather than
+// letting every fork fall through to an unvalidated closest-miss. Forks are
+// placed as the HARD levels of each stage, where that edge is the point.
+export const FORK_EXPOSURE_BAND = [455, 545];
+
 // ------------------------------------------------------------------ entry
 // `seed` is the starting point, not necessarily the seed used: candidates are
 // generated from consecutive seeds until one lands inside EXPOSURE_BAND, so
 // the result is still fully deterministic but guaranteed playable. Falls back
 // to the closest candidate if the band can't be hit.
-export function generateMap(seed, { spots = 9, lanes = null, tries = 60 } = {}) {
-  const [lo, hi] = EXPOSURE_BAND;
+export function generateMap(seed, { spots = 9, lanes = null, tries = 60, archetype = "serpentine" } = {}) {
+  const [lo, hi] = archetype === "fork" ? FORK_EXPOSURE_BAND : EXPOSURE_BAND;
   let best = null;
 
   for (let attempt = 0; attempt < tries; attempt++) {
     const rand = rng(seed + attempt * 101);
     const laneCount = lanes ?? 3 + Math.floor(rand() * 3); // 3-5
-    const path = smooth(skeleton(rand, laneCount));
-    const picked = pickSpots(path, rand, spots);
-    const exposure = exposurePerSpot(path, picked);
+
+    // One archetype, one to two routes. Every route ends at the same exit, so
+    // there is always exactly one temple.
+    let routes;
+    if (archetype === "spiral") routes = [smooth(spiralSkeleton(rand))];
+    else if (archetype === "fork") routes = forkSkeleton(rand).map((c) => smooth(c));
+    else if (archetype === "wander") {
+      const c = wanderSkeleton(rand);
+      if (!c) continue;                            // walk not found; next seed
+      routes = [smooth(c)];
+    }
+    else routes = [smooth(skeleton(rand, laneCount))];
+
+    const picked = pickSpots(routes, rand, spots);
+    // A map qualifies only if EVERY route sits inside the band — on a fork, a
+    // creep walks one branch or the other, so each branch alone has to afford
+    // the fire the campaign's difficulty math assumes.
+    const exposures = routes.map((r) => exposurePerSpot(r, picked));
     const candidate = {
-      path, spots: picked, lanes: laneCount, exposure,
-      length: Math.round(pathLength(path)),
+      path: routes[0], routes, spots: picked, lanes: laneCount, archetype,
+      exposure: Math.min(...exposures),
+      length: Math.round(pathLength(routes[0])),
       seedUsed: seed + attempt * 101,
     };
-    if (exposure >= lo && exposure <= hi) return candidate;
+    if (exposures.every((e) => e >= lo && e <= hi)) return candidate;
     // Keep whichever near-miss sits closest to the middle of the band.
-    const miss = Math.abs(exposure - (lo + hi) / 2);
+    const mid = (lo + hi) / 2;
+    const miss = Math.max(...exposures.map((e) => Math.abs(e - mid)));
     if (!best || miss < best.miss) best = { candidate, miss };
   }
   return best.candidate;

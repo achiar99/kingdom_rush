@@ -12,7 +12,7 @@ import { TOWER_TYPES } from "./data/towerTypes.js";
 import { FIRE } from "./data/abilities.js";
 import { state, PATH, spotOccupied } from "./state.js";
 import { canvas, ctx } from "./render/canvas.js";
-import { drawGround, drawPath, drawBuildSpots, drawCastle, TEMPLE_EXTENT } from "./render/terrain.js";
+import { drawSky, drawGround, drawPath, drawBuildSpots, drawCastle, TEMPLE_EXTENT } from "./render/terrain.js";
 import { drawTower, drawRally } from "./render/towers.js";
 import { drawSoldier, drawSummonedSoldier, drawHero } from "./render/units.js";
 import { drawEnemy } from "./render/monsters.js";
@@ -58,7 +58,14 @@ function templeSpot() {
 }
 
 export function render() {
-  ctx.clearRect(0, 0, CONFIG.width, CONFIG.height);
+  const SKY = CONFIG.skyHeight;
+  ctx.clearRect(0, 0, CONFIG.width, CONFIG.height + SKY);
+  drawSky();
+  // Everything from here down is drawn in WORLD coordinates, which start below
+  // the sky band. One translate keeps every path point, build spot and creep
+  // position exactly where the simulation put it.
+  ctx.save();
+  ctx.translate(0, SKY);
   drawGround();
   drawPath();
   drawBuildSpots();
@@ -95,6 +102,7 @@ export function render() {
   for (const p of state.projectiles) drawProjectile(p);
 
   drawOverlays();
+  ctx.restore();
 
   if (state.paused && !state.over) drawPausedBanner();
 }

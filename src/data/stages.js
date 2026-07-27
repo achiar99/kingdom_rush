@@ -9,44 +9,77 @@
 // and tunable without touching fifty definitions.
 export const LEVELS_PER_STAGE = 10;
 
-// Terrain palettes. Each stage cycles through its own set so consecutive
-// levels don't look identical, but a stage still reads as one place.
+// Terrain palettes, and the biome each stage is set in.
+//
+// The campaign walks through five climates rather than five shades of the same
+// olive-green field: grass, then forest, then snow, then grey rock, then a
+// burnt-out volcanic dark. That progression is doing real work — it tells you
+// how far you are without a single word of UI, and it stops levels 30 and 50
+// looking like recolours of level 3.
+//
+// The Greek framing still holds at every step, which is why these are places
+// and not just colours: the Troad is open plain, Arcadia is deep woodland, the
+// approach to Knossos climbs over snowbound Ida, the house of Hades is ash and
+// bare stone, and what is digging its way back up Othrys left the mountain
+// scorched. Each stage cycles through three variants so ten consecutive levels
+// don't repeat, while still reading as one place.
+//
+// `back` names the horizon motif — see render/backdrop.js.
 export const THEMES = {
-  // I — the Troad: dry grass, dust roads, bleached stone
-  ilion:     { grass: ["#8a9a5b", "#5d6b39"], checker: "rgba(255,247,214,0.03)",
-               path: { rim: "#9a7b42", body: "#cfae74", track: "#eddcb0" } },
-  troad:     { grass: ["#a8a05c", "#6f7a3e"], checker: "rgba(255,247,214,0.04)",
-               path: { rim: "#8f7038", body: "#c4a066", track: "#e6d2a2" } },
-  aegean:    { grass: ["#4f9a9a", "#2f6a6f"], checker: "rgba(255,255,255,0.05)",
-               path: { rim: "#b09256", body: "#e0c68c", track: "#f5e6bd" } },
-  // II — Arcadia: olive groves, deep woodland, river country
-  olive:     { grass: ["#6d8f52", "#415c33"], checker: "rgba(230,255,200,0.03)",
-               path: { rim: "#7a5f34", body: "#a8874f", track: "#cdae74" } },
-  arkadia:   { grass: ["#4e7a45", "#2c4a28"], checker: "rgba(210,255,190,0.03)",
-               path: { rim: "#6b5330", body: "#95784a", track: "#bb9c68" } },
-  alpheios:  { grass: ["#5b8f7a", "#33604f"], checker: "rgba(200,255,235,0.04)",
-               path: { rim: "#6f5a38", body: "#9c8354", track: "#c4a976" } },
-  // III — Crete and the Labyrinth: worked stone, bronze, lamplight
-  knossos:   { grass: ["#7d6a58", "#4c3f34"], checker: "rgba(255,220,160,0.04)",
-               path: { rim: "#6a5340", body: "#9c8163", track: "#c6a983" } },
-  labyrinth: { grass: ["#544a5e", "#302a38"], checker: "rgba(255,200,120,0.05)",
-               path: { rim: "#5c4a3a", body: "#87705a", track: "#ab9078" } },
-  bronze:    { grass: ["#6e5f3e", "#413825"], checker: "rgba(255,210,120,0.05)",
-               path: { rim: "#7a5c22", body: "#ab8236", track: "#d6a856" } },
-  // IV — the house of Hades: ash, asphodel, the river
-  asphodel:  { grass: ["#4a4f5e", "#2a2d38"], checker: "rgba(200,215,255,0.04)",
-               path: { rim: "#3f4454", body: "#626a80", track: "#8b93aa" } },
-  erebos:    { grass: ["#33283e", "#1c1526"], checker: "rgba(170,130,255,0.05)",
-               path: { rim: "#453458", body: "#63507f", track: "#8a72ab" } },
-  styx:      { grass: ["#2f4450", "#182730"], checker: "rgba(120,220,255,0.05)",
-               path: { rim: "#3a4a52", body: "#5a7078", track: "#84a0aa" } },
-  // V — Olympus: cloud, marble, lightning-scorched rock
-  othrys:    { grass: ["#5a5468", "#332f40"], checker: "rgba(255,255,255,0.04)",
-               path: { rim: "#4a4456", body: "#6f677f", track: "#9990a8" } },
-  olympus:   { grass: ["#8fa8c8", "#5a7093"], checker: "rgba(255,255,255,0.07)",
-               path: { rim: "#a89a6a", body: "#e0d2a0", track: "#f8f0d0" } },
-  aither:    { grass: ["#b8c8e8", "#7f90b8"], checker: "rgba(255,255,255,0.08)",
-               path: { rim: "#b0a070", body: "#ecdcae", track: "#fff8e0" } },
+  // I — the Troad: open grass, dust roads, bleached stone
+  ilion:      { grass: ["#8fa855", "#5d7038"], checker: "rgba(255,247,214,0.03)",
+                path: { rim: "#9a7b42", body: "#cfae74", track: "#eddcb0" },
+                back: "mountains", sky: ["#cfe0ea", "#9fc0b0"] },
+  troad:      { grass: ["#a3ab58", "#6b7a3c"], checker: "rgba(255,247,214,0.04)",
+                path: { rim: "#8f7038", body: "#c4a066", track: "#e6d2a2" },
+                back: "ruins", sky: ["#dfe6dc", "#b2c69c"] },
+  aegean:     { grass: ["#82a262", "#4f7048"], checker: "rgba(255,255,255,0.05)",
+                path: { rim: "#b09256", body: "#e0c68c", track: "#f5e6bd" },
+                back: "sea", sky: ["#bcdcea", "#7fb6c4"] },
+
+  // II — Arcadia: deep woodland, moss, river country
+  olive:      { grass: ["#5c8244", "#33512c"], checker: "rgba(230,255,200,0.03)",
+                path: { rim: "#7a5f34", body: "#a8874f", track: "#cdae74" },
+                back: "woods", sky: ["#9fbe92", "#6b8f63"] },
+  arkadia:    { grass: ["#456f3c", "#22401f"], checker: "rgba(210,255,190,0.03)",
+                path: { rim: "#6b5330", body: "#95784a", track: "#bb9c68" },
+                back: "woods", sky: ["#87ab7c", "#4f7549"] },
+  alpheios:   { grass: ["#4e7a5c", "#2b4c39"], checker: "rgba(200,255,235,0.04)",
+                path: { rim: "#6f5a38", body: "#9c8354", track: "#c4a976" },
+                back: "lake", sky: ["#a8c8bc", "#6a998a"] },
+
+  // III — the climb over Ida to Knossos: snow, frozen pine, blue shadow
+  idaSnow:    { grass: ["#eef3f8", "#c2cfdc"], checker: "rgba(255,255,255,0.06)",
+                path: { rim: "#8d9099", body: "#b9bcc4", track: "#dfe3ea" },
+                back: "snowpeaks", sky: ["#e6eef6", "#b9cfe0"] },
+  frostwood:  { grass: ["#dfe8f0", "#a9bccd"], checker: "rgba(255,255,255,0.05)",
+                path: { rim: "#7f838d", body: "#a9adb8", track: "#d2d8e2" },
+                back: "snowwoods", sky: ["#d8e4ee", "#a6bfd4"] },
+  glacier:    { grass: ["#d4e2ee", "#93aec6"], checker: "rgba(220,245,255,0.06)",
+                path: { rim: "#77808e", body: "#9fa8b6", track: "#c8d2df" },
+                back: "snowpeaks", sky: ["#cfe0ee", "#8fb2cc"] },
+
+  // IV — the house of Hades: grey rock, ash, no green at all
+  asphodel:   { grass: ["#8c8a86", "#56544f"], checker: "rgba(230,230,235,0.04)",
+                path: { rim: "#5a5852", body: "#807d75", track: "#a5a29a" },
+                back: "cliffs", sky: ["#9d9c9a", "#6b6a68"] },
+  greyreach:  { grass: ["#7c7a78", "#484744"], checker: "rgba(220,222,228,0.04)",
+                path: { rim: "#514f4a", body: "#75726b", track: "#98958d" },
+                back: "crags", sky: ["#8e8d8c", "#5c5b5a"] },
+  stygian:    { grass: ["#6e7276", "#3e4245"], checker: "rgba(190,210,225,0.05)",
+                path: { rim: "#4a4d51", body: "#6b6f74", track: "#8d9198" },
+                back: "cliffs", sky: ["#7d8388", "#4e5357"] },
+
+  // V — Othrys, scorched: black rock, ember light, ash falling
+  othrys:     { grass: ["#3b3238", "#1f1a20"], checker: "rgba(255,190,140,0.04)",
+                path: { rim: "#40353a", body: "#5d4e53", track: "#7d6a70" },
+                back: "volcano", sky: ["#5a2f28", "#2a1a1e"] },
+  emberwaste: { grass: ["#443434", "#241b1c"], checker: "rgba(255,170,110,0.05)",
+                path: { rim: "#4a3833", body: "#6a5049", track: "#8b6c62" },
+                back: "volcano", sky: ["#6e3626", "#2c1a18"] },
+  shadowpeak: { grass: ["#332f3c", "#1a1822"], checker: "rgba(200,170,255,0.04)",
+                path: { rim: "#3a3444", body: "#554e63", track: "#736b83" },
+                back: "crags", sky: ["#3f3450", "#1c1826"] },
 };
 
 // Starting gold is DERIVED from hpScale, not set per stage.
@@ -122,7 +155,7 @@ export const STAGES = [
     id: "labyrinth", numeral: "III", name: "Beneath Knossos",
     blurb: "Every corridor doubles back. Something is counting your turns.",
     kit: "labyrinth",
-    themes: ["knossos", "labyrinth", "bronze"],
+    themes: ["idaSnow", "frostwood", "glacier"],
     hpScale: [5.5, 5.2],
     icon: "🐂",
   },
@@ -130,7 +163,7 @@ export const STAGES = [
     id: "hades", numeral: "IV", name: "The House of Hades",
     blurb: "The dead are many, and they are no longer resting.",
     kit: "hades",
-    themes: ["asphodel", "erebos", "styx"],
+    themes: ["asphodel", "greyreach", "stygian"],
     hpScale: [6.0, 8.1],
     icon: "💀",
   },
@@ -138,7 +171,7 @@ export const STAGES = [
     id: "olympus", numeral: "V", name: "The Wrath of Olympus",
     blurb: "What the gods buried is climbing back up the mountain.",
     kit: "olympus",
-    themes: ["othrys", "olympus", "aither"],
+    themes: ["othrys", "emberwaste", "shadowpeak"],
     hpScale: [3.6, 5.8],
     icon: "⚡",
   },

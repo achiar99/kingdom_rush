@@ -14,7 +14,7 @@ import { dist, nearestPointOnPath } from "./geometry.js";
 import { state, PATH, LEVEL, spotOccupied } from "./state.js";
 import {
   makeTower, computeStats, upgradeCost, sellValue, relocateRally,
-  makeSoldier, makeSummonedSoldier, commandHero,
+  makeSoldier, makeSummonedSoldier, commandHero, nearestOnAnyRoute,
 } from "./entities.js";
 
 const OK = { ok: true };
@@ -115,7 +115,7 @@ export function sellTower(t) {
 // Barracks rally relocation. (x, y) is a raw field click; it snaps to the
 // nearest point on the road, and must land within the tower's rallyReach.
 export function relocateRallyPoint(tower, x, y) {
-  const snapped = nearestPointOnPath(PATH, x, y);
+  const snapped = nearestOnAnyRoute(x, y);
   if (dist(tower.x, tower.y, snapped.x, snapped.y) > tower.def.rallyReach)
     return no("Too far — click somewhere inside the glowing circle.");
   relocateRally(tower, snapped);

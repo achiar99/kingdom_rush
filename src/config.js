@@ -1,7 +1,16 @@
 // Core tunables + small constants shared across modules.
 export const CONFIG = {
   width: 900,
+  // The WORLD is 900x560 and every path, build spot and creep position lives in
+  // that space. Do not change these to make room for scenery.
   height: 560,
+  // A strip of sky ABOVE the world, added to the canvas rather than carved out
+  // of it. Carving it out was the first attempt and it was plainly wrong: all
+  // fifty maps are generated across the full 560, with paths reaching y=10, so
+  // a horizon at y=168 put the road through the sea and the mountains. The
+  // world keeps its coordinates; the canvas simply gets taller, and rendering
+  // is translated down by this much.
+  skyHeight: 96,
   waveClearBonus: 30,
   // The clock to the next wave starts when a wave STARTS, not when it dies, so
   // waves overlap: the countdown is visible for the whole battle and wave N+1

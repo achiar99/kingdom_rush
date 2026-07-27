@@ -30,8 +30,9 @@ const buildMenu = document.getElementById("buildMenu");
 const towerMenu = document.getElementById("towerMenu");
 
 function positionMenu(menuEl, x, y) {
+  // World -> canvas, so a menu anchored to a tower lines up with the tower.
   menuEl.style.left = (x / CONFIG.width) * 100 + "%";
-  menuEl.style.top = (y / CONFIG.height) * 100 + "%";
+  menuEl.style.top = ((y + CONFIG.skyHeight) / (CONFIG.height + CONFIG.skyHeight)) * 100 + "%";
 }
 
 export function closeMenus() { closeBuildMenu(); closeManageMenu(); }
@@ -294,11 +295,14 @@ document.addEventListener("keydown", (ev) => {
   closeMenus();
 });
 
+// Canvas point -> WORLD point. The canvas is taller than the world by the sky
+// band, so the offset has to come back off here or every click lands 96px
+// below where the player aimed.
 function canvasPos(ev) {
   const rect = canvas.getBoundingClientRect();
   return {
     x: (ev.clientX - rect.left) * (canvas.width / rect.width),
-    y: (ev.clientY - rect.top) * (canvas.height / rect.height),
+    y: (ev.clientY - rect.top) * (canvas.height / rect.height) - CONFIG.skyHeight,
   };
 }
 

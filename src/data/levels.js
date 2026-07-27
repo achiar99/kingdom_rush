@@ -55,7 +55,16 @@ const ramp = ([a, b], index) => a + (b - a) * (index / (TOTAL_LEVELS - 1));
 function buildLevel(stage, stageIndex, levelInStage) {
   const index = stageIndex * LEVELS_PER_STAGE + levelInStage;
   const spots = Math.round(ramp(CAMPAIGN.spots, index));
-  const map = generateMap(mapSeed(index), { spots });
+  // The route archetype cycles within each stage. WANDER — an organic road
+  // that hooks and staircases between any two edges — is the bread and butter;
+  // the 4th and 7th levels coil into a spiral (the temple in the heart of the
+  // maze); the 6th and 9th are FORKS — two roads that merge — which split the
+  // player's attention and are this campaign's "hard level" shape. The finale
+  // (10th) keeps the classic serpentine: the master fights are tuned on it,
+  // and its wall-to-wall lanes are the strongest arena for a set-piece boss.
+  const ARCH = { 3: "spiral", 5: "fork", 6: "spiral", 8: "fork", 9: "serpentine" };
+  const archetype = ARCH[levelInStage] || "wander";
+  const map = generateMap(mapSeed(index), { spots, archetype });
   const waveCount = Math.round(ramp(CAMPAIGN.waveCount, index));
   const hpScale = Number(band(stage.hpScale, levelInStage).toFixed(2));
 
@@ -75,6 +84,8 @@ function buildLevel(stage, stageIndex, levelInStage) {
     startGold: goldForHpScale(hpScale),
     startLives: Math.round(ramp(CAMPAIGN.startLives, index)),
     path: map.path,
+    routes: map.routes,
+    archetype: map.archetype,
     spots: map.spots,
     mapLanes: map.lanes,
     pathLength: map.length,

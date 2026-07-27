@@ -8,9 +8,10 @@
 // and free when drawn once.
 import { CONFIG } from "../config.js";
 import { TOWER_TYPES } from "../data/towerTypes.js";
-import { state, PATH, BUILD_SPOTS, LEVEL, THEME, spotOccupied } from "../state.js";
+import { state, PATH, PATHS, BUILD_SPOTS, LEVEL, THEME, spotOccupied } from "../state.js";
 import { ctx, groundShadow } from "./canvas.js";
 import { paveRoad, scatterProps } from "./scenery.js";
+import { drawBackdrop } from "./backdrop.js";
 
 const W = CONFIG.width, H = CONFIG.height;
 
@@ -34,6 +35,21 @@ function paintScenery() {
   g.fillStyle = base;
   g.fillRect(0, 0, W, H);
 
+  // Mottling colours come from the theme, not from a constant. They used to be
+  // a warm cream and a green-black, which is right for a grass field and wrong
+  // everywhere else: the green-black turned the snow stages a sickly olive and
+  // muddied the grey rock.
+  const rgbOf = (hex) => {
+    const v = parseInt(hex.slice(1), 16);
+    return [v >> 16, (v >> 8) & 255, v & 255];
+  };
+  const [gr, gg, gb] = rgbOf(THEME.grass[1]);
+  const SHADE = `${Math.round(gr * 0.45)},${Math.round(gg * 0.45)},${Math.round(gb * 0.5)}`;
+  const [lr, lg, lb] = rgbOf(THEME.grass[0]);
+  const LIT = `${Math.min(255, Math.round(lr * 1.3 + 30))},` +
+              `${Math.min(255, Math.round(lg * 1.3 + 30))},` +
+              `${Math.min(255, Math.round(lb * 1.25 + 24))}`;
+
   // Two scales of soft mottling instead of the old hard 40px checkerboard:
   // broad patches that break the flat wash of colour, then finer dappling on
   // top of them like sunlight through leaves. Both are position-derived, so
@@ -48,7 +64,7 @@ function paintScenery() {
       const f3 = h3 - Math.floor(h3);
       const x = f * W, y = f2 * H, r = minR + f3 * (maxR - minR);
       const rad = g.createRadialGradient(x, y, 0, x, y, r);
-      rad.addColorStop(0, f > 0.5 ? `rgba(255,250,215,${lightA})` : `rgba(20,34,14,${darkA})`);
+      rad.addColorStop(0, f > 0.5 ? `rgba(${LIT},${lightA})` : `rgba(${SHADE},${darkA})`);
       rad.addColorStop(1, "rgba(0,0,0,0)");
       g.fillStyle = rad;
       g.beginPath();
@@ -59,8 +75,11 @@ function paintScenery() {
   blot(26, 90, 210, 0.07, 0.09);     // broad ground patches
   blot(190, 20, 60, 0.05, 0.05);     // finer dappling
 
-  paveRoad(g, PATH, THEME);
-  scatterProps(g, PATH, BUILD_SPOTS, LEVEL.stageId, LEVEL.index + 1);
+  // Secondary routes first, primary last, so where a fork's branches merge the
+  // primary's paving sits on top and the joint reads as one road.
+  const routes = PATHS.length ? PATHS.map((r) => r.pts) : [PATH];
+  for (let i = routes.length - 1; i >= 0; i--) paveRoad(g, routes[i], THEME);
+  scatterProps(g, routes, BUILD_SPOTS, LEVEL.stageId, LEVEL.index + 1);
 
   // vignette, last, over everything
   const v = g.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.88);
@@ -70,6 +89,29 @@ function paintScenery() {
   g.fillRect(0, 0, W, H);
 
   sceneryKey = LEVEL.id;
+}
+
+// ------------------------------------------------------------------- sky
+// The backdrop lives in its own strip above the world (CONFIG.skyHeight) and
+// is cached separately, because the world layer is translated down past it and
+// the two must never share a coordinate space again.
+let skyCanvas = null;
+let skyKey = null;
+
+export function drawSky() {
+  const SKY = CONFIG.skyHeight;
+  if (skyKey !== LEVEL.id) {
+    if (!skyCanvas) {
+      skyCanvas = document.createElement("canvas");
+      skyCanvas.width = W;
+      skyCanvas.height = SKY;
+    }
+    const g = skyCanvas.getContext("2d");
+    g.clearRect(0, 0, W, SKY);
+    drawBackdrop(g, THEME, LEVEL.index + 1, SKY);
+    skyKey = LEVEL.id;
+  }
+  ctx.drawImage(skyCanvas, 0, 0);
 }
 
 // Ground + road + props in one blit. Repaints only when the level changes.

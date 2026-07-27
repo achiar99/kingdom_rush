@@ -112,7 +112,7 @@ export function runTrial({
       for (const e of state.enemies) {
         if (e.dead) continue;
         hpOnField += e.hp;
-        const prog = e.dist / PATH_LEN;
+        const prog = e.dist / (e.pathLen || PATH_LEN);
         if (prog > maxProg) maxProg = prog;
       }
       if (state.enemies.length > cur.peakEnemies) cur.peakEnemies = state.enemies.length;

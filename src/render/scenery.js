@@ -135,6 +135,62 @@ function cypress(g, s, r) {
   }
 }
 
+// A conifer under snow. The snow stages were being dressed with the same green
+// cypresses as the olive groves, which looked like summer trees planted in a
+// blizzard.
+function snowPine(g, s, r) {
+  shadow(g, 10 * s, 4 * s);
+  g.fillStyle = "#3a2d20";
+  g.fillRect(-1.5 * s, -5 * s, 3 * s, 5 * s);
+  for (let i = 0; i < 3; i++) {
+    const cy = -7 * s - i * 10 * s;
+    const hw = (11 - i * 2.6) * s;
+    const hh = (13 - i * 1.6) * s;
+    g.fillStyle = i ? "#2c4048" : "#33484f";              // cold, desaturated
+    g.beginPath();
+    g.moveTo(0, cy - hh);
+    g.lineTo(hw, cy + hh * 0.35);
+    g.lineTo(-hw, cy + hh * 0.35);
+    g.closePath();
+    g.fill();
+    g.fillStyle = "rgba(255,255,255,0.82)";               // snow load on top
+    g.beginPath();
+    g.moveTo(0, cy - hh);
+    g.lineTo(hw * 0.62, cy - hh * 0.1);
+    g.lineTo(hw * 0.22, cy - hh * 0.2);
+    g.lineTo(0, cy - hh * 0.02);
+    g.lineTo(-hw * 0.3, cy - hh * 0.16);
+    g.lineTo(-hw * 0.62, cy - hh * 0.1);
+    g.closePath();
+    g.fill();
+  }
+  void r;
+}
+
+// A shard of cooled lava, for the one stage where nothing grows.
+function obsidian(g, s, r) {
+  shadow(g, 11 * s, 4 * s);
+  const h = (14 + (r % 1) * 8) * s;
+  g.beginPath();
+  g.moveTo(-6 * s, 0);
+  g.lineTo(-2.4 * s, -h);
+  g.lineTo(2.2 * s, -h * 0.78);
+  g.lineTo(7 * s, 0);
+  g.closePath();
+  const grad = g.createLinearGradient(-6 * s, -h, 7 * s, 0);
+  grad.addColorStop(0, "#3a3040");
+  grad.addColorStop(0.5, "#241d2a");
+  grad.addColorStop(1, "#15111a");
+  g.fillStyle = grad;
+  g.fill();
+  g.strokeStyle = "rgba(255,140,70,0.55)";                // ember caught in it
+  g.lineWidth = 1.2 * s;
+  g.beginPath();
+  g.moveTo(-2 * s, -h * 0.7);
+  g.lineTo(0.6 * s, -h * 0.3);
+  g.stroke();
+}
+
 function oliveTree(g, s, r) {
   shadow(g, 17 * s, 6 * s);
   // gnarled forked trunk
@@ -299,6 +355,7 @@ function shrub(g, s, r) {
 
 const PROP_FNS = {
   cypress, oliveTree, deadTree, rock, brokenColumn, votiveColumn, amphora, shrub,
+  snowPine, obsidian,
 };
 
 // What grows where, split by how it wants to be placed.
@@ -308,12 +365,22 @@ const PROP_FNS = {
 // small outcrops. `features` are the single memorable objects (a toppled
 // column, an abandoned pot) and are placed near the road, because that's the
 // only place a pot has any business being.
+//
+// These follow the BIOME each stage is set in (see THEMES in data/stages.js),
+// not just its name. Getting that wrong is very visible: the snow stages were
+// dressed with the same green cypresses as the olive groves, and the scorched
+// black rock of Othrys had flowering shrubs on it.
 const PROP_MIX = {
+  // I — open grass: olives, cypress, dry scrub
   troy:      { canopy: ["oliveTree", "oliveTree", "cypress", "shrub"], features: ["amphora", "brokenColumn"] },
-  arcadia:   { canopy: ["cypress", "oliveTree", "shrub", "shrub"],     features: ["brokenColumn", "deadTree"] },
-  labyrinth: { canopy: ["cypress", "shrub"],                           features: ["brokenColumn", "votiveColumn", "amphora"] },
-  hades:     { canopy: ["deadTree", "deadTree"],                       features: ["brokenColumn", "votiveColumn"] },
-  olympus:   { canopy: ["cypress", "shrub"],                           features: ["votiveColumn", "brokenColumn"] },
+  // II — deep woodland: trees everywhere, and more of them
+  arcadia:   { canopy: ["cypress", "cypress", "oliveTree", "shrub"],   features: ["brokenColumn", "deadTree"] },
+  // III — snow: laden pines and bare rock, nothing in leaf
+  labyrinth: { canopy: ["snowPine", "snowPine", "rock"],               features: ["brokenColumn", "votiveColumn"] },
+  // IV — grey rock: dead wood and stone only
+  hades:     { canopy: ["deadTree", "deadTree", "rock"],               features: ["brokenColumn", "votiveColumn"] },
+  // V — scorched: obsidian shards and burnt trunks
+  olympus:   { canopy: ["obsidian", "deadTree", "obsidian"],           features: ["votiveColumn", "obsidian"] },
 };
 
 // Clearances. Bigger than they were: props used to crowd right up to the
@@ -325,14 +392,19 @@ const FEATURE_BAND = [56, 108];
 // Scatter props in clumps rather than uniformly, and keep the whole layer
 // clear of the road and every build spot — the scenery's job is to sit behind
 // the game, not to compete with it for attention.
-export function scatterProps(g, path, spots, stageId, seed) {
+export function scatterProps(g, routes, spots, stageId, seed) {
   const rand = rng(seed * 2654435761);
   const mix = PROP_MIX[stageId] || PROP_MIX.troy;
   const placed = [];
 
+  // keep clear of EVERY road on the map, not just the primary
   const roadDist = (x, y) => {
-    const on = nearestPointOnPath(path, x, y);
-    return dist(x, y, on.x, on.y);
+    let d = Infinity;
+    for (const r of routes) {
+      const on = nearestPointOnPath(r, x, y);
+      d = Math.min(d, dist(x, y, on.x, on.y));
+    }
+    return d;
   };
   const free = (x, y, near) =>
     x > 28 && x < W - 28 && y > 42 && y < H - 26 &&

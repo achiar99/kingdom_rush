@@ -30,8 +30,11 @@ import { ctx, groundShadow, shadedSphere, shadedEllipse, FIGURE_INK, inkWidth } 
 
 // which way is this creep headed? (for lean/facing; 0 when moving vertically)
 function pathDirX(e) {
-  if (!PATH.length) return 0;      // drawn outside a level, e.g. in the guide
-  const ahead = pointAtDistance(PATH, PATH_LEN, Math.min(e.dist + 4, PATH_LEN));
+  // the creep's own route — on a fork the two roads run opposite directions
+  // through the same ground, and facing from the wrong one walks backwards
+  const pts = e.path || PATH, len = e.pathLen || PATH_LEN;
+  if (!pts.length) return 0;       // drawn outside a level, e.g. in the guide
+  const ahead = pointAtDistance(pts, len, Math.min(e.dist + 4, len));
   const dx = ahead.x - e.x;
   return Math.abs(dx) < 0.3 ? 0 : Math.sign(dx);
 }

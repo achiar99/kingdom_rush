@@ -27,6 +27,9 @@
 <script type="module">
   import { ENEMY_KITS, ROLES, MASTERS } from "../src/data/enemyKits.js";
   import { loadLevel } from "../src/state.js";
+  import { drawSky, drawGround, drawCastle } from "../src/render/terrain.js";
+  import { LEVELS } from "../src/data/levels.js";
+  import { STAGES } from "../src/data/stages.js";
   import { ctx } from "../src/render/canvas.js";
   import { drawEnemy } from "../src/render/monsters.js";
   import { drawTower } from "../src/render/towers.js";
@@ -44,7 +47,7 @@
   // view for judging whether any single one is actually drawn well, because a
   // twelve-pixel creep in a 1500px sheet is unreadable. Focus mode is for that.
   //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters
-  //   ?focus=towers | levels | heroes | shots
+  //   ?focus=towers | levels | heroes | shots | biomes
   const PARAMS = new URLSearchParams(location.search);
   const FOCUS = PARAMS.get("focus");
   // ?zoom=N and ?only=<type> for close inspection of a single tower
@@ -59,6 +62,34 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, x, y);
+  }
+
+  // One level from each stage-theme, ground and horizon together. Fifteen
+  // biomes is far too many to review by loading levels one at a time, and the
+  // whole point of the pass is the PROGRESSION, which only shows side by side.
+  function drawBiomeSheet() {
+    ctx.clearRect(0, 0, 1500, 1120);
+    // three consecutive levels per stage = its three theme variants
+    const picks = [];
+    // one of each route archetype per stage: serpentine, spiral, fork
+    STAGES.forEach((st, si) => { for (const k of [0, 3, 5]) picks.push(si * 10 + k); });
+    const COLS = 3, CW = 1500 / COLS, RH = 1120 / 5;
+    const SKY = 96;
+    const k = Math.min((CW - 16) / 900, (RH - 26) / (560 + SKY));
+    picks.forEach((idx, i) => {
+      const lvl = LEVELS[idx];
+      loadLevel(idx);
+      const cx = (i % COLS) * CW + 8, cy = Math.floor(i / COLS) * RH + 6;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(k, k);
+      drawSky();                       // the band above
+      ctx.translate(0, SKY);           // then the world below it, as in play
+      drawGround();
+      ctx.restore();
+      label(`${lvl.name}  \u00b7  ${lvl.theme}  \u00b7  ${lvl.archetype}`, cx + (CW - 16) / 2,
+        cy + (560 + SKY) * k + 12, "#e8ecf4", 12, 700);
+    });
   }
 
   // What each tower throws, plus the mark it leaves. Projectiles live for a
@@ -228,6 +259,7 @@
     if (FOCUS === "towers") return drawTowerSheet();
     if (FOCUS === "levels") return drawLevelSheet();
     if (FOCUS === "shots") return drawShotSheet();
+    if (FOCUS === "biomes") return drawBiomeSheet();
     if (FOCUS === "heroes") return drawHeroSheet();
     if (FOCUS) return drawFocus();
     ctx.clearRect(0, 0, 1500, 1120);

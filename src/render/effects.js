@@ -249,12 +249,15 @@ export function drawEffect(fx) {
   ctx.stroke();
 }
 
+// Drawn in CANVAS space, after the world transform is restored, so it has to
+// cover the sky band too.
 export function drawPausedBanner() {
+  const h = CONFIG.height + CONFIG.skyHeight;
   ctx.fillStyle = "rgba(10,12,18,0.5)";
-  ctx.fillRect(0, 0, CONFIG.width, CONFIG.height);
+  ctx.fillRect(0, 0, CONFIG.width, h);
   ctx.fillStyle = "#e8ecf4";
   ctx.font = "bold 40px system-ui, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
-  ctx.fillText("⏸ Paused", CONFIG.width / 2, CONFIG.height / 2);
+  ctx.fillText("⏸ Paused", CONFIG.width / 2, h / 2);
 }

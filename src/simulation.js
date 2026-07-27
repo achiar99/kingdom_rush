@@ -11,7 +11,7 @@ import { newUnlocksAt } from "./data/unlocks.js";
 import { HERO_LEVELING, HEROES, DEFAULT_HERO } from "./data/hero.js";
 import { FIRE, SUMMON } from "./data/abilities.js";
 import { dist, pointAtDistance } from "./geometry.js";
-import { state, PATH, PATH_LEN, LEVEL } from "./state.js";
+import { state, PATH, PATHS, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy, gainHeroXp, makeHero } from "./entities.js";
 import { getDifficulty, markComplete, unlockLevel, progress } from "./save.js";
 import {
@@ -70,10 +70,16 @@ export function startNextWave() {
   // because two or three waves can now be spawning at once and one shared
   // countdown cannot represent that.
   let at = state.clock;
+  let n = 0;                        // running spawn index, for route assignment
   for (const g of wave.groups)
     for (let i = 0; i < g.count; i++) {
       state.spawnQueue.push({ type: g.type, at, hpMul, speedMul: wave.speedMul,
-                              wave: state.waveIndex });
+                              wave: state.waveIndex,
+        // On a fork the wave splits evenly between the roads, alternating
+        // spawn by spawn so both branches see pressure from the first creep.
+        // The master always takes the primary route — its walk is the fight
+        // the finale is tuned around.
+        route: g.type === "master" ? 0 : n++ % PATHS.length });
       at += g.gap;
     }
   state.spawnQueue.sort((a, b) => a.at - b.at);
@@ -224,9 +230,9 @@ export function update(dt) {
   for (const e of state.enemies) {
     if (e.engaged) continue;
     e.dist += e.speed * (e.slowMul ?? 1) * dt;
-    const p = pointAtDistance(PATH, PATH_LEN, e.dist);
+    const p = pointAtDistance(e.path || PATH, e.pathLen || PATH_LEN, e.dist);
     e.x = p.x; e.y = p.y;
-    if (e.dist >= PATH_LEN) {
+    if (e.dist >= (e.pathLen || PATH_LEN)) {
       e.dead = true;
       // A stage master reaching the temple ends the run outright, however many
       // lives are left. Everything else in the game is attrition you can absorb;
@@ -293,7 +299,7 @@ export function update(dt) {
     for (let i = 0; i < e.splits; i++) {
       const back = 14 + i * 12;
       spawned.push(makeEnemy(
-        { type: "swarm", wave: e.wave, hpMul: e.hpMul * 0.55, speedMul: e.speedMul },
+        { type: "swarm", wave: e.wave, route: e.routeIdx, hpMul: e.hpMul * 0.55, speedMul: e.speedMul },
         Math.max(0, e.dist - back)));
     }
   }
@@ -473,16 +479,23 @@ function updateSummonedSoldiers(dt) {
 // stripped 5-21% off it before it walked the entire path, and dropping its HP
 // from 4200 to 600 barely moved the needle — it was never being shot at. Now
 // everything turns to face the boss, which is also what you'd expect it to do.
+// "Furthest along" is measured as distance REMAINING to the temple, not
+// distance travelled — on a fork two creeps are on different roads of
+// different lengths, and travelled distance stops meaning anything between
+// them. Remaining distance is the thing a tower actually cares about: who
+// gets to the gate first.
+const remaining = (e) => (e.pathLen || PATH_LEN) - e.dist;
+
 export function acquireTarget(tower) {
-  let best = null, bestDist = -1, bestIsMaster = false;
+  let best = null, bestRem = Infinity, bestIsMaster = false;
   for (const e of state.enemies) {
     if (e.dead) continue;
     if (e.flying && !tower.hitsAir) continue;
     if (dist(tower.x, tower.y, e.x, e.y) > tower.range) continue;
     const isMaster = e.def.role === "master";
     if (bestIsMaster && !isMaster) continue;          // a master already has priority
-    if (isMaster && !bestIsMaster) { best = e; bestDist = e.dist; bestIsMaster = true; continue; }
-    if (e.dist > bestDist) { best = e; bestDist = e.dist; }
+    if (isMaster && !bestIsMaster) { best = e; bestRem = remaining(e); bestIsMaster = true; continue; }
+    if (remaining(e) < bestRem) { best = e; bestRem = remaining(e); }
   }
   return best;
 }
@@ -627,14 +640,14 @@ function updateHero(dt) {
   if (def.attack === "ranged") {
     hero.shootCd -= dt;
     if (hero.shootCd <= 0 && !inMelee && !hero.forcedMove) {
-      let best = null, bestDist = -1, bestIsMaster = false;
+      let best = null, bestRem = Infinity, bestIsMaster = false;
       for (const e of state.enemies) {
         if (e.dead) continue;
         if (dist(hero.x, hero.y, e.x, e.y) > def.range) continue;
         const isMaster = e.def.role === "master";
         if (bestIsMaster && !isMaster) continue;
-        if (isMaster && !bestIsMaster) { best = e; bestDist = e.dist; bestIsMaster = true; continue; }
-        if (e.dist > bestDist) { best = e; bestDist = e.dist; }
+        if (isMaster && !bestIsMaster) { best = e; bestRem = remaining(e); bestIsMaster = true; continue; }
+        if (remaining(e) < bestRem) { best = e; bestRem = remaining(e); }
       }
       if (best) {
         state.projectiles.push({

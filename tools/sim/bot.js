@@ -14,7 +14,7 @@ import { wavesFor } from "../../src/data/levels.js";
 import { maxTowerLevelFor } from "../../src/data/unlocks.js";
 import { FIRE } from "../../src/data/abilities.js";
 import { dist, pointAtDistance } from "../../src/geometry.js";
-import { state, PATH, PATH_LEN, BUILD_SPOTS, LEVEL, spotOccupied } from "../../src/state.js";
+import { state, PATH, PATHS, PATH_LEN, BUILD_SPOTS, LEVEL, spotOccupied } from "../../src/state.js";
 import { upgradeCost } from "../../src/entities.js";
 import { getDifficulty } from "../../src/save.js";
 import { startNextWave } from "../../src/simulation.js";
@@ -65,8 +65,11 @@ export const SKILL_NAMES = Object.keys(SKILL_PROFILES);
 // them sit inside its range, which is directly proportional to the seconds a
 // creep spends being shot at — the single best predictor of a good spot.
 function samplePath(step = 8) {
+  // every route: a spot that watches a fork's shared tail sees every creep on
+  // the map and scores accordingly (the shared stretch appears once per route)
   const pts = [];
-  for (let d = 0; d <= PATH_LEN; d += step) pts.push(pointAtDistance(PATH, PATH_LEN, d));
+  for (const r of PATHS.length ? PATHS : [{ pts: PATH, len: PATH_LEN }])
+    for (let d = 0; d <= r.len; d += step) pts.push(pointAtDistance(r.pts, r.len, d));
   return pts;
 }
 
@@ -396,8 +399,9 @@ export class Bot {
     if (act.canCast("soldiers").ok && this.rng.chance(this.p.abilityUse)) {
       // Reinforcements only matter where ground creeps are getting through.
       const ground = live.filter((e) => !e.flying);
-      const lead = ground.reduce((a, e) => (!a || e.dist > a.dist ? e : a), null);
-      if (lead && (lead.dist / PATH_LEN > 0.55 || ground.length >= 5))
+      const prog = (e) => e.dist / (e.pathLen || PATH_LEN);
+      const lead = ground.reduce((a, e) => (!a || prog(e) > prog(a) ? e : a), null);
+      if (lead && (prog(lead) > 0.55 || ground.length >= 5))
         act.castReinforcements(lead.x, lead.y);
     }
   }
@@ -424,9 +428,11 @@ export class Bot {
     const ground = state.enemies.filter((e) => !e.dead && !e.flying);
     if (!ground.length) return;
     // Meet the creep that's furthest along, a little ahead of where it is.
-    const lead = ground.reduce((a, e) => (e.dist > a.dist ? e : a));
-    if (lead.dist / PATH_LEN < 0.25) return;       // still deep in the towers' teeth
-    const intercept = pointAtDistance(PATH, PATH_LEN, Math.min(PATH_LEN - 1, lead.dist + 40));
+    const prog = (e) => e.dist / (e.pathLen || PATH_LEN);
+    const lead = ground.reduce((a, e) => (prog(e) > prog(a) ? e : a));
+    if (prog(lead) < 0.25) return;                 // still deep in the towers' teeth
+    const leadPath = lead.path || PATH, leadLen = lead.pathLen || PATH_LEN;
+    const intercept = pointAtDistance(leadPath, leadLen, Math.min(leadLen - 1, lead.dist + 40));
     act.moveHero(intercept.x, intercept.y);
     this.sinceHeroOrder = 0;
   }

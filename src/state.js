@@ -11,6 +11,10 @@ import { pathLength } from "./geometry.js";
 export let PATH = [];
 export let BUILD_SPOTS = [];
 export let PATH_LEN = 0;
+// Every route on the map, as { pts, len }. Most maps have one; a fork has two
+// that share their tail. PATH/PATH_LEN stay the primary route so single-road
+// code keeps meaning what it always meant.
+export let PATHS = [];
 export let THEME = null;
 export let LEVEL = null; // current level def
 // The creature roster for this level's stage, keyed by role. Wave tables name
@@ -24,6 +28,7 @@ export function loadLevel(idx) {
   THEME = THEMES[LEVEL.theme];
   KIT = ENEMY_KITS[LEVEL.kit].creatures;
   PATH_LEN = pathLength(PATH);
+  PATHS = (LEVEL.routes || [LEVEL.path]).map((pts) => ({ pts, len: pathLength(pts) }));
 }
 
 export const state = {

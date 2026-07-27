@@ -8,7 +8,7 @@ import {
   towerRangeMul, towerFireRateMul, heroPowerMul, sellRefundBonus,
 } from "./data/store.js";
 import { nearestPointOnPath, pointAtDistance, pathLength } from "./geometry.js";
-import { state, PATH, KIT } from "./state.js";
+import { state, PATH, PATHS, KIT } from "./state.js";
 
 // Armour blunts steel; a ward blunts sorcery. Keeping them as two separate
 // resistances is what stops any single tower being the answer to everything —
@@ -29,11 +29,17 @@ export function makeEnemy(entry, dist = 0) {
   // A master's health is set outright rather than multiplied by the level's
   // difficulty — see MASTERS in data/enemyKits.js for why.
   const hp = d.absoluteHp ?? d.hp * entry.hpMul;
-  const p = dist > 0 ? pointAtDistance(PATH, pathLength(PATH), dist) : PATH[0];
+  // Which road this creep walks. A fork map has two; everything the creep
+  // does from here on — moving, leaking, being compared for "furthest along" —
+  // happens on its own route.
+  const routeIdx = Math.min(entry.route ?? 0, PATHS.length - 1);
+  const route = PATHS[routeIdx] || { pts: PATH, len: pathLength(PATH) };
+  const p = dist > 0 ? pointAtDistance(route.pts, route.len, dist) : route.pts[0];
   return {
     // which wave sent it — waves overlap, so "the board is empty" no longer
     // identifies a wave and each creep has to carry its own tag
     type: entry.type, wave: entry.wave ?? 0, def: d, dist,
+    routeIdx, path: route.pts, pathLen: route.len,
     speed: d.speed * entry.speedMul,
     maxHp: hp, hp, reward: d.reward, radius: d.radius,
     armor: d.armor, flying: d.flying, boss: !!d.boss, colors: d.colors,
@@ -52,13 +58,25 @@ export function makeEnemy(entry, dist = 0) {
   };
 }
 
+// The closest point on ANY route — a barracks beside branch B of a fork must
+// rally onto branch B, not onto the primary road across the map.
+export function nearestOnAnyRoute(x, y) {
+  let best = null, bestD = Infinity;
+  for (const r of PATHS.length ? PATHS : [{ pts: PATH }]) {
+    const on = nearestPointOnPath(r.pts, x, y);
+    const d = (on.x - x) ** 2 + (on.y - y) ** 2;
+    if (d < bestD) { bestD = d; best = on; }
+  }
+  return best;
+}
+
 export function makeTower(spot, typeKey) {
   const type = TOWER_TYPES[typeKey];
   const t = { spot, x: spot.x, y: spot.y, type: typeKey, def: type,
               cooldown: 0, level: 1, invested: type.cost };
   computeStats(t);
   if (type.attack === "none") {
-    t.rally = nearestPointOnPath(PATH, spot.x, spot.y);
+    t.rally = nearestOnAnyRoute(spot.x, spot.y);
     t.soldiers = [];
     for (let i = 0; i < t.soldierCount; i++) t.soldiers.push(makeSoldier(t, i));
   }
