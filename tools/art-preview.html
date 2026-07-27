@@ -30,6 +30,9 @@
   import { ctx } from "../src/render/canvas.js";
   import { drawEnemy } from "../src/render/monsters.js";
   import { drawTower } from "../src/render/towers.js";
+  import { drawHero, drawSoldier } from "../src/render/units.js";
+  import { HEROES } from "../src/data/hero.js";
+  import { makeHero } from "../src/entities.js";
   import { TOWER_TYPES, TYPE_LIST, specsFor } from "../src/data/towerTypes.js";
 
   // monsters.js reads PATH/PATH_LEN for facing, so a level has to be loaded.
@@ -39,7 +42,7 @@
   // the right view for spotting two creatures that look alike; it is the wrong
   // view for judging whether any single one is actually drawn well, because a
   // twelve-pixel creep in a 1500px sheet is unreadable. Focus mode is for that.
-  //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters | towers
+  //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters | towers | heroes
   const PARAMS = new URLSearchParams(location.search);
   const FOCUS = PARAMS.get("focus");
   // ?zoom=N and ?only=<type> for close inspection of a single tower
@@ -84,19 +87,49 @@
     });
   }
 
+  // The five champions plus a rank-and-file hoplite for scale, at four times
+  // the size. They share one rig, so seeing them side by side is the only way
+  // to tell whether the per-hero dials still make them distinct.
+  function drawHeroSheet() {
+    ctx.clearRect(0, 0, 1500, 1120);
+    const keys = Object.keys(HEROES);
+    const CW = 1500 / 3, RH = 360, Z = ZOOM_OVERRIDE || 4;
+    const cells = [...keys.map((k) => ({ hero: k })), { soldier: true }];
+    cells.forEach((cell, i) => {
+      const cx = (i % 3) * CW + CW / 2, cy = Math.floor(i / 3) * RH + 190;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(Z, Z);
+      ctx.translate(-cx, -cy);
+      if (cell.soldier) {
+        drawSoldier({ x: cx, y: cy, alive: true, hp: 1, maxHp: 1, target: null,
+                      tower: { def: { name: "Phalanx" }, spec: null } });
+      } else {
+        const hero = makeHero({ x: cx, y: cy }, HEROES[cell.hero]);
+        hero.level = 6; hero.hp = hero.maxHp;
+        drawHero(hero);
+      }
+      ctx.restore();
+      label(cell.soldier ? "Phalanx hoplite (for scale)" : HEROES[cell.hero].name,
+        cx, cy + 110, "#e8ecf4", 15, 700);
+    });
+  }
+
   // One kit, five across and two down, at four times the size.
   function drawFocus() {
     ctx.clearRect(0, 0, 1500, 1120);
-    const list = FOCUS === "masters"
+    let list = FOCUS === "masters"
       ? Object.values(MASTERS)
       : ROLES.map((r) => ENEMY_KITS[FOCUS].creatures[r]);
-    const COLS = 5, CW = 1500 / COLS, CH = 520;
+    // ?only=<role> narrows to one creature so it can be inspected large.
+    if (ONLY) list = list.filter((c) => c.role === ONLY || c.name.toLowerCase().includes(ONLY.toLowerCase()));
+    const COLS = ONLY ? 1 : 5, CW = 1500 / COLS, CH = 520;
     // Masters are already radius 34-38 with their own 1.35-1.5 art scale, so
     // the creep multiplier would run them off the canvas.
-    const ZOOM = FOCUS === "masters" ? 1.6 : 4;
+    const ZOOM = ZOOM_OVERRIDE || (FOCUS === "masters" ? 1.6 : 4);
     list.forEach((creature, i) => {
       const cx = (i % COLS) * CW + CW / 2;
-      const cy = Math.floor(i / COLS) * CH + 210;
+      const cy = Math.floor(i / COLS) * CH + (ONLY ? 420 : 210);
       ctx.save();
       ctx.translate(cx, cy);
       ctx.scale(ZOOM, ZOOM);
@@ -117,6 +150,7 @@
 
   function draw() {
     if (FOCUS === "towers") return drawTowerSheet();
+    if (FOCUS === "heroes") return drawHeroSheet();
     if (FOCUS) return drawFocus();
     ctx.clearRect(0, 0, 1500, 1120);
 

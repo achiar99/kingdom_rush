@@ -9,7 +9,66 @@
 // he's the best of them, not a different species.
 import { SUMMON } from "../data/abilities.js";
 import { state } from "../state.js";
-import { ctx, groundShadow } from "./canvas.js";
+import { ctx, groundShadow, FIGURE_INK } from "./canvas.js";
+
+// The same ink pass the creeps and the buildings get. Everything below is
+// drawn inside a scale(), so these widths are in figure units and grow with
+// the champion rather than needing to be passed the scale.
+function inkFill(build, colour, lw = 1.1) {
+  ctx.beginPath();
+  build();
+  ctx.fillStyle = colour;
+  ctx.fill();
+  ctx.strokeStyle = FIGURE_INK;
+  ctx.lineWidth = lw;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+}
+
+// A limb: one fat dark pass, then the flesh colour on top.
+function inkLimb(build, colour, w, lw = 1) {
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  build();
+  ctx.strokeStyle = FIGURE_INK;
+  ctx.lineWidth = w + lw * 1.6;
+  ctx.stroke();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = w;
+  ctx.stroke();
+}
+
+// Eyes and brow, in figure units, centred on the head at (0, -10).
+function faceOn(o, dir) {
+  const open = o.helm2 === "phrygian" || o.bare;
+  ctx.save();
+  ctx.scale(dir, 1);                                    // keep the gaze forward
+  const ex = 1.25, ey = -10.3;
+  for (const sgn of [-1, 1]) {
+    ctx.fillStyle = "#fdfaf0";
+    ctx.beginPath();
+    ctx.ellipse(sgn * ex, ey, 0.85, open ? 1 : 0.62, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = "#241a2c";
+    ctx.beginPath();
+    ctx.arc(sgn * ex + 0.15, ey + 0.1, 0.46, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (open) {                                           // brow only reads bare-headed
+    ctx.strokeStyle = "rgba(50,32,20,0.75)";
+    ctx.lineWidth = 0.7;
+    ctx.beginPath();
+    ctx.moveTo(-2.3, -11.9); ctx.lineTo(-0.5, -11.4);
+    ctx.moveTo(2.3, -11.9);  ctx.lineTo(0.5, -11.4);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(90,50,30,0.55)";            // mouth
+    ctx.lineWidth = 0.6;
+    ctx.beginPath();
+    ctx.moveTo(-0.9, -8.4); ctx.lineTo(0.9, -8.4);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
 // ------------------------------------------------------------------- hoplite
 // o: { s, dir, fighting, helm, crest, tunic, cape, weapon, blazon, bare }
@@ -24,13 +83,10 @@ function drawHoplite(x, y, o) {
   ctx.scale(dir * s, s);
 
   // --- legs: bare, in sandals, one forward ---
-  ctx.strokeStyle = "#c8a074";
-  ctx.lineCap = "round";
-  ctx.lineWidth = 3;
-  ctx.beginPath();
-  ctx.moveTo(-1.5, 3); ctx.lineTo(-3 + swing * 1.2, 10);
-  ctx.moveTo(2, 3);    ctx.lineTo(3.5 - swing * 1.2, 10);
-  ctx.stroke();
+  inkLimb(() => {
+    ctx.moveTo(-1.5, 3); ctx.lineTo(-3 + swing * 1.2, 10);
+    ctx.moveTo(2, 3);    ctx.lineTo(3.5 - swing * 1.2, 10);
+  }, "#c8a074", 3);
   ctx.strokeStyle = "#6b4a24";                         // sandal straps
   ctx.lineWidth = 1.6;
   ctx.beginPath();
@@ -40,13 +96,12 @@ function drawHoplite(x, y, o) {
 
   // --- cape, behind the body ---
   if (o.cape) {
-    ctx.fillStyle = o.cape;
-    ctx.beginPath();
-    ctx.moveTo(-2, -6);
-    ctx.quadraticCurveTo(-11 - swing, 0, -7 - swing, 9);
-    ctx.lineTo(-1, 6);
-    ctx.closePath();
-    ctx.fill();
+    inkFill(() => {
+      ctx.moveTo(-2, -6);
+      ctx.quadraticCurveTo(-11 - swing, 0, -7 - swing, 9);
+      ctx.lineTo(-1, 6);
+      ctx.closePath();
+    }, o.cape);
   }
 
   // --- linothorax: the stiff linen cuirass, with its shoulder yoke ---
@@ -54,26 +109,40 @@ function drawHoplite(x, y, o) {
   body.addColorStop(0, light);
   body.addColorStop(0.55, mid);
   body.addColorStop(1, dark);
-  ctx.fillStyle = body;
-  ctx.beginPath();
-  ctx.moveTo(-5, -7);
-  ctx.lineTo(5, -7);
-  ctx.lineTo(4.2, 4);
-  ctx.lineTo(-4.2, 4);
-  ctx.closePath();
-  ctx.fill();
+  inkFill(() => {
+    ctx.moveTo(-5, -7);
+    ctx.lineTo(5, -7);
+    ctx.lineTo(4.2, 4);
+    ctx.lineTo(-4.2, 4);
+    ctx.closePath();
+  }, body, 1.2);
   ctx.fillStyle = "rgba(255,255,255,0.3)";             // yoke over the shoulders
   ctx.fillRect(-5, -7, 10, 1.8);
-  ctx.fillStyle = dark;                                 // pteruges (leather strips)
-  for (let i = -2; i <= 2; i++) ctx.fillRect(i * 2 - 0.7, 4, 1.5, 3.4);
+  if (o.robe) {
+    // A caster wears cloth to the ankle, not a soldier's leather strips. Circe
+    // was a sorceress drawn in a blank linothorax and read as rank and file.
+    inkFill(() => {
+      ctx.moveTo(-4.2, 3.5);
+      ctx.lineTo(4.2, 3.5);
+      ctx.quadraticCurveTo(5.6, 8, 4.6, 11);
+      ctx.lineTo(-4.6, 11);
+      ctx.quadraticCurveTo(-5.6, 8, -4.2, 3.5);
+      ctx.closePath();
+    }, mid, 1.1);
+    ctx.strokeStyle = "rgba(255,255,255,0.28)";         // folds
+    ctx.lineWidth = 0.6;
+    for (const fx of [-2.2, 0, 2.2]) {
+      ctx.beginPath();
+      ctx.moveTo(fx, 4.2); ctx.lineTo(fx * 1.25, 10.6);
+      ctx.stroke();
+    }
+  } else {
+    ctx.fillStyle = dark;                               // pteruges (leather strips)
+    for (let i = -2; i <= 2; i++) ctx.fillRect(i * 2 - 0.7, 4, 1.5, 3.4);
+  }
 
   // --- far arm with the weapon ---
-  ctx.strokeStyle = "#c8a074";
-  ctx.lineWidth = 2.6;
-  ctx.beginPath();
-  ctx.moveTo(3, -4.5);
-  ctx.lineTo(7 + swing * 2, -1);
-  ctx.stroke();
+  inkLimb(() => { ctx.moveTo(3, -4.5); ctx.lineTo(7 + swing * 2, -1); }, "#c8a074", 2.6);
   ctx.save();
   ctx.translate(7 + swing * 2, -1);
   ctx.rotate(-0.5 + swing * 0.8);
@@ -82,34 +151,40 @@ function drawHoplite(x, y, o) {
 
   // --- the hoplon: a big round shield, the most recognisable thing about him
   if (!o.bare) {
-    const face = ctx.createRadialGradient(-7, -4, 1, -5.5, -2, 8.5);
+    // Sized and placed so the torso, cape and head all stay visible. At 7.2x8
+    // centred on the chest it covered the entire figure — Achilles and Ajax
+    // were a gold disc with legs and a helmet, indistinguishable from each
+    // other and from a Phalanx hoplite.
+    const face = ctx.createRadialGradient(-7.4, -1.5, 1, -6.2, 0.5, 7);
     face.addColorStop(0, "#e8c070");
     face.addColorStop(0.7, "#b8862c");
     face.addColorStop(1, "#6e4c10");
-    ctx.fillStyle = face;
+    inkFill(() => ctx.ellipse(-6.2, 0.5, 5.7, 6.3, 0, 0, Math.PI * 2), face, 1.3);
+    ctx.strokeStyle = "rgba(255,238,190,0.5)";          // bronze rim highlight
+    ctx.lineWidth = 0.9;
     ctx.beginPath();
-    ctx.ellipse(-5.5, -1.5, 7.2, 8, 0, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(50,32,8,0.65)";
-    ctx.lineWidth = 1.1;
+    ctx.ellipse(-6.2, 0.5, 4.1, 4.6, 0, 0, Math.PI * 2);
     ctx.stroke();
     if (o.blazon) {                                     // painted device
       ctx.save();
       ctx.scale(dir, 1);                                // keep letters unmirrored
       ctx.fillStyle = o.blazonColor || "#20304a";
-      ctx.font = "bold 8px Georgia, serif";
+      ctx.font = "bold 6.5px Georgia, serif";
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(o.blazon, dir * -5.5, -1);
+      ctx.fillText(o.blazon, dir * -6.2, 1);
       ctx.restore();
     }
   }
 
   // --- head and helm ---
-  ctx.fillStyle = "#d8b088";
-  ctx.beginPath();
-  ctx.arc(0, -10, 3.6, 0, Math.PI * 2);
-  ctx.fill();
+  inkFill(() => ctx.arc(0, -10, 3.6, 0, Math.PI * 2), "#d8b088");
+  // A face. Drawn before the helm so a full Corinthian bowl covers it and only
+  // the eye slot shows, while a phrygian cap leaves it visible — which is what
+  // separates the two silhouettes at a glance. Every champion was a blank oval
+  // before this: the creeps have had eyes since the first pass, the heroes
+  // never did, and it made them read as mannequins.
+  faceOn(o, dir);
 
   const [hl, hd] = o.helm || ["#e8d8a8", "#8a6a2c"];
   const hg = ctx.createLinearGradient(0, -14, 0, -7);
@@ -119,33 +194,56 @@ function drawHoplite(x, y, o) {
 
   if (o.helm2 === "phrygian") {
     // forward-curling cap — the light-troops look, for Atalanta and Perseus
-    ctx.beginPath();
-    ctx.arc(0, -10.5, 4.2, Math.PI, 0);
-    ctx.quadraticCurveTo(5.5, -15, 2, -16.5);
-    ctx.quadraticCurveTo(1, -13.5, -4.2, -10.5);
-    ctx.closePath();
-    ctx.fill();
+    inkFill(() => {
+      ctx.arc(0, -10.5, 4.2, Math.PI, 0);
+      ctx.quadraticCurveTo(5.5, -15, 2, -16.5);
+      ctx.quadraticCurveTo(1, -13.5, -4.2, -10.5);
+      ctx.closePath();
+    }, hg, 1.2);
   } else {
     // Corinthian: full-face bowl with a nose guard and an eye slot
+    // Corinthian: a bowl, two cheek pieces and a nasal, drawn as three separate
+    // masses so the gaps BETWEEN them are the eye slots and the face already
+    // drawn underneath shows through.
+    //
+    // The previous version filled the whole helm and then painted two dark
+    // rectangles on for slots. Once the heroes had faces that read as a solid
+    // helmet with a black cross stamped on it, and the eyes were buried.
+    inkFill(() => {                                     // bowl, down to the brow
+      ctx.moveTo(-4.4, -10.9);
+      ctx.arc(0, -10.5, 4.4, Math.PI, 0);
+      ctx.lineTo(4.4, -10.9);
+      ctx.closePath();
+    }, hg, 1.2);
+    for (const sgn of [-1, 1]) {                        // cheek pieces
+      inkFill(() => {
+        ctx.moveTo(sgn * 4.4, -11);
+        ctx.lineTo(sgn * 4.4, -8);
+        ctx.lineTo(sgn * 2.5, -7.6);
+        ctx.lineTo(sgn * 2.5, -11);
+        ctx.closePath();
+      }, hg, 1);
+    }
+    inkFill(() => {                                     // nasal
+      ctx.moveTo(-0.75, -11);
+      ctx.lineTo(0.75, -11);
+      ctx.lineTo(0.6, -7.2);
+      ctx.lineTo(-0.6, -7.2);
+      ctx.closePath();
+    }, hg, 0.9);
+    ctx.strokeStyle = "rgba(255,240,190,0.55)";         // gold band on the bowl
+    ctx.lineWidth = 0.8;
     ctx.beginPath();
-    ctx.arc(0, -10.5, 4.4, Math.PI, 0);
-    ctx.lineTo(4.4, -8);
-    ctx.lineTo(-4.4, -8);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillRect(-0.9, -9, 1.8, 3.6);                   // nasal
-    ctx.fillStyle = "rgba(20,14,6,0.75)";               // eye slot
-    ctx.fillRect(-3.6, -11.2, 3, 1.5);
-    ctx.fillRect(0.6, -11.2, 3, 1.5);
+    ctx.arc(0, -10.5, 3.2, Math.PI, 0);
+    ctx.stroke();
   }
 
   if (o.crest) {                                        // horsehair crest
-    ctx.fillStyle = o.crest;
-    ctx.beginPath();
-    ctx.moveTo(-3.6, -13.4);
-    ctx.quadraticCurveTo(0, -20, 3.6, -13.4);
-    ctx.quadraticCurveTo(0, -15.6, -3.6, -13.4);
-    ctx.fill();
+    inkFill(() => {
+      ctx.moveTo(-3.6, -13.4);
+      ctx.quadraticCurveTo(0, -20, 3.6, -13.4);
+      ctx.quadraticCurveTo(0, -15.6, -3.6, -13.4);
+    }, o.crest, 1);
   }
 
   ctx.restore();
@@ -295,7 +393,7 @@ const HERO_MARKS = {
   ajax:     { crest: null,      blazon: "Α", helm2: null },      // no crest: the plain wall
   atalanta: { crest: null,      blazon: null, helm2: "phrygian", bare: true },
   perseus:  { crest: "#7fd8d8", blazon: null, helm2: "phrygian" },
-  circe:    { crest: null,      blazon: null, helm2: "phrygian", bare: true },
+  circe:    { crest: null,      blazon: null, helm2: "phrygian", bare: true, robe: true },
 };
 
 export function drawHero(hero) {
@@ -335,7 +433,7 @@ export function drawHero(hero) {
     tunic: [def.colors.light, def.colors.mid, def.colors.dark],
     helm: def.helm, cape: def.cape,
     crest: marks.crest ?? def.plume, blazon: marks.blazon,
-    helm2: marks.helm2, bare: marks.bare,
+    helm2: marks.helm2, bare: marks.bare, robe: marks.robe,
   });
 
   const w = 34, h = 5, pct = Math.max(0, hero.hp / hero.maxHp);

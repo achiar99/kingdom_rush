@@ -26,7 +26,7 @@
 // stop mid-stride when a hoplite blocks them.
 import { pointAtDistance } from "../geometry.js";
 import { PATH, PATH_LEN } from "../state.js";
-import { ctx, groundShadow, shadedSphere, shadedEllipse } from "./canvas.js";
+import { ctx, groundShadow, shadedSphere, shadedEllipse, FIGURE_INK, inkWidth } from "./canvas.js";
 
 // which way is this creep headed? (for lean/facing; 0 when moving vertically)
 function pathDirX(e) {
@@ -37,14 +37,42 @@ function pathDirX(e) {
 }
 
 // ------------------------------------------------------------- shared parts
+// shadedEllipse/shadedSphere ink themselves, but frames draw limbs, tails and
+// wings with bare fills and strokes — and those were the only parts of a
+// creature left with no outline, which is exactly where the silhouette lives.
+// A Cyclops was a crisply drawn chest floating in unoutlined brown mush.
+function inkedFill(build, colour, lw) {
+  ctx.beginPath();
+  build();
+  ctx.fillStyle = colour;
+  ctx.fill();
+  ctx.strokeStyle = FIGURE_INK;
+  ctx.lineWidth = lw;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+}
+
+// A limb: one fat dark pass, then the colour on top of it. Cheaper and better
+// looking than trying to outline a stroked path properly.
+function inkedStroke(build, colour, w, lw) {
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  build();
+  ctx.strokeStyle = FIGURE_INK;
+  ctx.lineWidth = w + lw * 1.7;
+  ctx.stroke();
+  ctx.strokeStyle = colour;
+  ctx.lineWidth = w;
+  ctx.stroke();
+}
+
 function monsterFeet(x, cy, r, phase, color, spread = 0.42) {
   const sw = Math.sin(phase);
-  ctx.fillStyle = color;
+  const lw = inkWidth(r);
   for (const sgn of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(x + sgn * r * spread, cy + r * 0.8 + sgn * sw * r * 0.09,
-      r * 0.26, r * 0.15, 0, 0, Math.PI * 2);
-    ctx.fill();
+    inkedFill(() => ctx.ellipse(x + sgn * r * spread, cy + r * 0.8 + sgn * sw * r * 0.09,
+      r * 0.26, r * 0.15, 0, 0, Math.PI * 2), color, lw);
   }
 }
 
@@ -107,67 +135,64 @@ function toothyMouth(x, y, w, h, teeth) {
 }
 
 // ------------------------------------------------------------------ frames
-// A frame draws the body and returns where the head sits, so
-// crests can be placed without every recipe knowing the anatomy; a torso
-// ellipse (bx/by/brx/bry) for a SKIN to lay material on; and optionally a grip
-// point (gx/gy/gs) for carried gear, when the hands are not near the body
+// A frame draws the body and returns where the head sits, so crests can be
+// placed without every recipe knowing the anatomy, plus optionally a grip
+// point (gx/gy/gs) for carried gear when the hands are not near the body
 // centre or belong to a limb smaller than the creature's radius.
 //
-// That torso ellipse is deliberately SMALLER than the body actually drawn. It
-// is not the silhouette — it is the region a skin may safely paint, meaning
-// the part of the body no head overlaps. Frames draw their own head, and the
-// skin pass runs after the frame returns, so reporting the true torso would
-// let a chiton or a ribcage paint straight over the creature's face.
+// Every frame is handed a `skin` callback and must invoke it with its TRUE
+// torso ellipse, at the exact moment the torso is drawn and before the head
+// goes on. That ordering is the whole design:
+//
+// Skins used to run after the frame returned, which meant a chiton or a
+// ribcage would paint straight over the creature's face — so frames reported
+// a shrunken "head-safe" ellipse instead. That fixed the faces and broke the
+// skins: on a hulk the safe region was half the chest, so its fur ringed the
+// middle of its belly instead of its outline. Painting before the head means
+// the head simply covers any overlap, and every skin gets the real body.
 
-function frameBiped(e, cy) {
+function frameBiped(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x, ph = e.dist / 5;
   monsterFeet(x, cy, r, ph, c.dark);
   shadedEllipse(x, cy + r * 0.12, r * 0.72, r * 0.78, c.light, c.mid, c.dark); // torso
+  skin(x, cy + r * 0.12, r * 0.72, r * 0.78);
   shadedEllipse(x, cy - r * 0.62, r * 0.5, r * 0.46, c.light, c.mid, c.dark);  // head
-  return { hx: x, hy: cy - r * 0.62, hr: r * 0.5,
-           bx: x, by: cy + r * 0.28, brx: r * 0.68, bry: r * 0.46 };
+  return { hx: x, hy: cy - r * 0.62, hr: r * 0.5 };
 }
 
 // Hunched and top-heavy: a small low head sunk between huge shoulders, arms
 // long enough to drag. Reads as "big and stupid" from across the board, which
 // is exactly what a cyclops or a gigante should read as.
-function frameHulk(e, cy) {
+function frameHulk(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x, ph = e.dist / 5;
   const dir = pathDirX(e) || 1;
   const sw = Math.sin(ph);
-  ctx.fillStyle = c.dark;                                    // stumpy legs
-  for (const sgn of [-1, 1]) {
-    ctx.beginPath();
-    ctx.ellipse(x + sgn * r * 0.36, cy + r * 0.82 + sgn * sw * r * 0.07,
-      r * 0.28, r * 0.22, 0, 0, Math.PI * 2);
-    ctx.fill();
+  const lw = inkWidth(r);
+  for (const sgn of [-1, 1]) {                               // stumpy legs
+    inkedFill(() => ctx.ellipse(x + sgn * r * 0.36, cy + r * 0.82 + sgn * sw * r * 0.07,
+      r * 0.28, r * 0.22, 0, 0, Math.PI * 2), c.dark, lw);
   }
-  // arms hang forward and swing opposite the legs
-  ctx.strokeStyle = c.mid;
-  ctx.lineWidth = r * 0.34;
-  ctx.lineCap = "round";
-  for (const sgn of [-1, 1]) {
-    ctx.beginPath();
-    ctx.moveTo(x + sgn * r * 0.62, cy - r * 0.2);
-    ctx.quadraticCurveTo(x + sgn * r * 0.95, cy + r * 0.3,
-      x + sgn * r * 0.78 + dir * sw * r * 0.12, cy + r * 0.72);
-    ctx.stroke();
+  for (const sgn of [-1, 1]) {                               // arms swing opposite
+    inkedStroke(() => {
+      ctx.moveTo(x + sgn * r * 0.62, cy - r * 0.2);
+      ctx.quadraticCurveTo(x + sgn * r * 0.95, cy + r * 0.3,
+        x + sgn * r * 0.78 + dir * sw * r * 0.12, cy + r * 0.72);
+    }, c.mid, r * 0.34, lw);
   }
   shadedEllipse(x, cy + r * 0.1, r * 0.86, r * 0.7, c.light, c.mid, c.dark);   // barrel chest
+  skin(x, cy + r * 0.1, r * 0.86, r * 0.7);
   const hy = cy - r * 0.5;
   shadedEllipse(x + dir * r * 0.1, hy, r * 0.38, r * 0.34, c.light, c.mid, c.dark);
-  return { hx: x + dir * r * 0.1, hy, hr: r * 0.38,
-           bx: x, by: cy + r * 0.3, brx: r * 0.78, bry: r * 0.44 };
+  return { hx: x + dir * r * 0.1, hy, hr: r * 0.38 };
 }
 
 // No legs at all — a torso that frays into smoke. The missing ground contact
 // is the whole point: it separates the dead from everything else at a glance.
-function frameWraith(e, cy) {
+function frameWraith(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x;
   const t = performance.now() / 300;
   const drift = Math.sin(t + e.dist / 20) * r * 0.1;
-  ctx.fillStyle = c.dark;                                    // tattered tail
-  ctx.beginPath();
+  ctx.beginPath();                                           // tattered tail
   ctx.moveTo(x - r * 0.6, cy + r * 0.1);
   for (let i = 0; i <= 6; i++) {
     const p = i / 6;
@@ -182,34 +207,37 @@ function frameWraith(e, cy) {
     ctx.lineTo(x + w + wob + drift, cy + r * 0.1 + p * r * 1.15);
   }
   ctx.closePath();
+  ctx.fillStyle = c.dark;
   ctx.fill();
+  ctx.strokeStyle = FIGURE_INK;
+  ctx.lineWidth = inkWidth(r);
+  ctx.stroke();
   shadedEllipse(x, cy - r * 0.05, r * 0.62, r * 0.68, c.light, c.mid, c.dark);
+  skin(x, cy - r * 0.05, r * 0.62, r * 0.68);
   const hy = cy - r * 0.72;
   shadedEllipse(x, hy, r * 0.42, r * 0.4, c.light, c.mid, c.dark);
-  return { hx: x, hy, hr: r * 0.42,
-           bx: x, by: cy + r * 0.06, brx: r * 0.58, bry: r * 0.36 };
+  return { hx: x, hy, hr: r * 0.42 };
 }
 
 // Low and many-legged, legs arching ABOVE the body line. Nothing else in the
 // bestiary has that outline, so it stays legible even at swarm size.
-function frameCrawler(e, cy) {
+function frameCrawler(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x, ph = e.dist / 3.5;
   const dir = pathDirX(e) || 1;
-  ctx.strokeStyle = c.dark;
-  ctx.lineWidth = Math.max(1.2, r * 0.1);
-  ctx.lineCap = "round";
+  const lw = inkWidth(r);
   for (let i = 0; i < 3; i++) {
     for (const sgn of [-1, 1]) {
       const step = Math.sin(ph + i * 1.7 + (sgn > 0 ? Math.PI : 0));
       const ox = (i - 1) * r * 0.5;
-      ctx.beginPath();
-      ctx.moveTo(x + ox, cy + r * 0.25);
-      ctx.quadraticCurveTo(x + ox + sgn * r * 0.7, cy - r * 0.45,
-        x + ox + sgn * r * 0.85, cy + r * 0.6 + step * r * 0.1);
-      ctx.stroke();
+      inkedStroke(() => {
+        ctx.moveTo(x + ox, cy + r * 0.25);
+        ctx.quadraticCurveTo(x + ox + sgn * r * 0.7, cy - r * 0.45,
+          x + ox + sgn * r * 0.85, cy + r * 0.6 + step * r * 0.1);
+      }, c.dark, Math.max(1.2, r * 0.1), lw * 0.5);
     }
   }
   shadedEllipse(x, cy + r * 0.3, r * 0.8, r * 0.42, c.light, c.mid, c.dark);   // abdomen
+  skin(x, cy + r * 0.3, r * 0.8, r * 0.42);
   const hx = x + dir * r * 0.72, hy = cy + r * 0.12;
   shadedEllipse(hx, hy, r * 0.36, r * 0.3, c.light, c.mid, c.dark);            // cephalothorax
   ctx.strokeStyle = c.dark;                                                    // mandibles
@@ -220,61 +248,55 @@ function frameCrawler(e, cy) {
     ctx.lineTo(hx + dir * r * 0.6, hy + sgn * r * 0.24);
     ctx.stroke();
   }
-  return { hx, hy, hr: r * 0.36,
-           bx: x - dir * r * 0.2, by: cy + r * 0.32, brx: r * 0.5, bry: r * 0.36 };
+  return { hx, hy, hr: r * 0.36 };
 }
 
 // Three necks off one coil. Cut one down and the shape still says "hydra",
 // which is the right read for the role that splits when it dies.
-function frameHydra(e, cy) {
+function frameHydra(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x;
   const t = performance.now() / 340;
-  ctx.fillStyle = c.dark;
-  ctx.beginPath();
-  ctx.ellipse(x, cy + r * 0.6, r * 1.0, r * 0.38, 0, 0, Math.PI * 2);
-  ctx.fill();
+  const lw = inkWidth(r);
+  inkedFill(() => ctx.ellipse(x, cy + r * 0.6, r * 1.0, r * 0.38, 0, 0, Math.PI * 2),
+    c.dark, lw);
   shadedEllipse(x, cy + r * 0.52, r * 0.88, r * 0.34, c.light, c.mid, c.dark);
+  skin(x, cy + r * 0.52, r * 0.88, r * 0.34);
   const necks = [-0.62, 0, 0.62];
   const heads = [];
   necks.forEach((off, i) => {
     const sway = Math.sin(t + i * 2.1) * r * 0.14;
     const tipX = x + off * r * 0.95 + sway, tipY = cy - r * (0.5 + (i === 1 ? 0.32 : 0));
-    ctx.strokeStyle = c.mid;
-    ctx.lineWidth = r * 0.26;
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(x + off * r * 0.4, cy + r * 0.4);
-    ctx.quadraticCurveTo(x + off * r * 0.9, cy - r * 0.05, tipX, tipY);
-    ctx.stroke();
+    inkedStroke(() => {
+      ctx.moveTo(x + off * r * 0.4, cy + r * 0.4);
+      ctx.quadraticCurveTo(x + off * r * 0.9, cy - r * 0.05, tipX, tipY);
+    }, c.mid, r * 0.26, lw);
     shadedEllipse(tipX, tipY, r * 0.28, r * 0.22, c.light, c.mid, c.dark);
     heads.push({ x: tipX, y: tipY });
   });
   // the outer two get their own little eyes; the centre head is the one the
   // crest/eye pass will decorate
   for (const h of [heads[0], heads[2]]) angryEyes(h.x, h.y, r * 0.44, { size: 0.2, spread: 0.3 });
-  return { hx: heads[1].x, hy: heads[1].y, hr: r * 0.28,
-           bx: x, by: cy + r * 0.56, brx: r * 0.82, bry: r * 0.28 };
+  return { hx: heads[1].x, hy: heads[1].y, hr: r * 0.28 };
 }
 
 // Human above, horse below. Worth its own frame rather than a quadruped with
 // a hat: the vertical torso is what makes a centaur read as a centaur.
-function frameCentaur(e, cy) {
+function frameCentaur(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x, ph = e.dist / 4;
   const dir = pathDirX(e) || 1;
   const sw = Math.sin(ph);
-  ctx.fillStyle = c.dark;
+  const lw = inkWidth(r);
   for (const [ox, phase] of [[-0.66, sw], [-0.38, -sw], [0.24, sw], [0.5, -sw]]) {
-    ctx.beginPath();
-    ctx.ellipse(x + ox * r, cy + r * 0.78 + phase * r * 0.08, r * 0.14, r * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
+    inkedFill(() => ctx.ellipse(x + ox * r, cy + r * 0.78 + phase * r * 0.08,
+      r * 0.14, r * 0.2, 0, 0, Math.PI * 2), c.dark, lw * 0.8);
   }
   shadedEllipse(x - dir * r * 0.15, cy + r * 0.32, r * 0.9, r * 0.46, c.light, c.mid, c.dark);
-  ctx.strokeStyle = c.dark;                                  // tail
-  ctx.lineWidth = Math.max(1.5, r * 0.12);
-  ctx.beginPath();
-  ctx.moveTo(x - dir * r * 1.0, cy + r * 0.18);
-  ctx.quadraticCurveTo(x - dir * r * 1.3, cy + r * 0.5 + sw * r * 0.1, x - dir * r * 1.1, cy + r * 0.85);
-  ctx.stroke();
+  skin(x - dir * r * 0.15, cy + r * 0.32, r * 0.9, r * 0.46);
+  inkedStroke(() => {                                        // tail
+    ctx.moveTo(x - dir * r * 1.0, cy + r * 0.18);
+    ctx.quadraticCurveTo(x - dir * r * 1.3, cy + r * 0.5 + sw * r * 0.1,
+      x - dir * r * 1.1, cy + r * 0.85);
+  }, c.dark, Math.max(1.5, r * 0.12), lw * 0.5);
   const tx = x + dir * r * 0.42;                             // upright human torso
   shadedEllipse(tx, cy - r * 0.28, r * 0.4, r * 0.5, c.light, c.mid, c.dark);
   const hy = cy - r * 0.86;
@@ -284,46 +306,43 @@ function frameCentaur(e, cy) {
   // anchor and the default size, the hoplon sat dead centre on the horse's
   // back at nearly the width of the whole figure — it read as a shield with
   // legs rather than as a centaur.
-  return { hx: tx, hy, hr: r * 0.34, gx: tx + r * 0.3, gy: cy - r * 0.5, gs: 0.72,
-           bx: x - dir * r * 0.15, by: cy + r * 0.5, brx: r * 0.7, bry: r * 0.26 };
+  return { hx: tx, hy, hr: r * 0.34, gx: tx + r * 0.3, gy: cy - r * 0.5, gs: 0.72 };
 }
 
 // Long low body on four legs — boars, lions, Cerberus, centaur barrels.
-function frameQuadruped(e, cy) {
+function frameQuadruped(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x, ph = e.dist / 4;
   const dir = pathDirX(e) || 1;
   const sw = Math.sin(ph);
-  ctx.fillStyle = c.dark;                                    // four legs
+  const lw = inkWidth(r);
   for (const [ox, phase] of [[-0.62, sw], [-0.3, -sw], [0.3, sw], [0.62, -sw]]) {
-    ctx.beginPath();
-    ctx.ellipse(x + ox * r, cy + r * 0.72 + phase * r * 0.08, r * 0.15, r * 0.2, 0, 0, Math.PI * 2);
-    ctx.fill();
+    inkedFill(() => ctx.ellipse(x + ox * r, cy + r * 0.72 + phase * r * 0.08,
+      r * 0.15, r * 0.2, 0, 0, Math.PI * 2), c.dark, lw * 0.8);
   }
+  inkedStroke(() => {                                                          // tail
+    ctx.moveTo(x - dir * r * 0.95, cy);
+    ctx.quadraticCurveTo(x - dir * r * 1.35, cy - r * 0.3 + sw * r * 0.12,
+      x - dir * r * 1.2, cy + r * 0.25);
+  }, c.dark, Math.max(1.5, r * 0.11), lw * 0.5);
   shadedEllipse(x, cy + r * 0.15, r * 1.02, r * 0.6, c.light, c.mid, c.dark);  // barrel
+  skin(x, cy + r * 0.15, r * 1.02, r * 0.6);
   const hx = x + dir * r * 0.85, hy = cy - r * 0.22;
   shadedEllipse(hx, hy, r * 0.44, r * 0.4, c.light, c.mid, c.dark);            // head
-  ctx.strokeStyle = c.dark;                                                    // tail
-  ctx.lineWidth = Math.max(1.5, r * 0.11);
-  ctx.beginPath();
-  ctx.moveTo(x - dir * r * 0.95, cy);
-  ctx.quadraticCurveTo(x - dir * r * 1.35, cy - r * 0.3 + sw * r * 0.12, x - dir * r * 1.2, cy + r * 0.25);
-  ctx.stroke();
-  return { hx, hy, hr: r * 0.44,
-           bx: x - dir * r * 0.25, by: cy + r * 0.15, brx: r * 0.62, bry: r * 0.5 };
+  return { hx, hy, hr: r * 0.44 };
 }
 
 // Compact body, wings supplied separately by drawEnemy.
-function frameAvian(e, cy) {
+function frameAvian(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x;
   const dir = pathDirX(e) || 1;
+  inkedFill(() => {                                          // tail feathers
+    ctx.moveTo(x - dir * r * 0.5, cy + r * 0.5);
+    ctx.lineTo(x - dir * r * 1.15, cy + r * 0.95);
+    ctx.lineTo(x - dir * r * 0.38, cy + r * 0.2);
+    ctx.closePath();
+  }, c.dark, inkWidth(r) * 0.8);
   shadedEllipse(x, cy, r * 0.72, r * 0.82, c.light, c.mid, c.dark);
-  ctx.fillStyle = c.dark;                                    // tail feathers
-  ctx.beginPath();
-  ctx.moveTo(x - dir * r * 0.5, cy + r * 0.5);
-  ctx.lineTo(x - dir * r * 1.15, cy + r * 0.95);
-  ctx.lineTo(x - dir * r * 0.38, cy + r * 0.2);
-  ctx.closePath();
-  ctx.fill();
+  skin(x, cy, r * 0.72, r * 0.82);
   const hx = x + dir * r * 0.28, hy = cy - r * 0.62;
   shadedEllipse(hx, hy, r * 0.36, r * 0.34, c.light, c.mid, c.dark);
   ctx.fillStyle = "#f0c040";                                 // beak
@@ -333,27 +352,23 @@ function frameAvian(e, cy) {
   ctx.lineTo(hx + dir * r * 0.28, hy + r * 0.2);
   ctx.closePath();
   ctx.fill();
-  return { hx, hy, hr: r * 0.36,
-           bx: x, by: cy + r * 0.15, brx: r * 0.62, bry: r * 0.42 };
+  return { hx, hy, hr: r * 0.36 };
 }
 
 // Coiled body tapering to a raised head.
-function frameSerpent(e, cy) {
+function frameSerpent(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x;
   const dir = pathDirX(e) || 1;
   const wave = Math.sin(e.dist / 9);
-  ctx.fillStyle = c.dark;                                    // coil on the ground
-  ctx.beginPath();
-  ctx.ellipse(x, cy + r * 0.55, r * 1.0, r * 0.4, 0, 0, Math.PI * 2);
-  ctx.fill();
+  const lw = inkWidth(r);
+  inkedFill(() => ctx.ellipse(x, cy + r * 0.55, r * 1.0, r * 0.4, 0, 0, Math.PI * 2),
+    c.dark, lw);                                             // coil on the ground
   shadedEllipse(x, cy + r * 0.5, r * 0.85, r * 0.32, c.light, c.mid, c.dark);
-  ctx.strokeStyle = c.mid;                                   // rearing neck
-  ctx.lineWidth = r * 0.44;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(x, cy + r * 0.4);
-  ctx.quadraticCurveTo(x + wave * r * 0.3, cy - r * 0.2, x + dir * r * 0.18, cy - r * 0.62);
-  ctx.stroke();
+  skin(x, cy + r * 0.5, r * 0.85, r * 0.32);
+  inkedStroke(() => {                                        // rearing neck
+    ctx.moveTo(x, cy + r * 0.4);
+    ctx.quadraticCurveTo(x + wave * r * 0.3, cy - r * 0.2, x + dir * r * 0.18, cy - r * 0.62);
+  }, c.mid, r * 0.44, lw);
   const hx = x + dir * r * 0.18, hy = cy - r * 0.72;
   shadedEllipse(hx, hy, r * 0.42, r * 0.32, c.light, c.mid, c.dark);
   ctx.strokeStyle = "#ff5b4a";                               // forked tongue
@@ -362,43 +377,33 @@ function frameSerpent(e, cy) {
   ctx.moveTo(hx + dir * r * 0.35, hy + r * 0.08);
   ctx.lineTo(hx + dir * r * 0.7, hy + r * 0.14);
   ctx.stroke();
-  return { hx, hy, hr: r * 0.42,
-           bx: x, by: cy + r * 0.5, brx: r * 0.85, bry: r * 0.32 };
+  return { hx, hy, hr: r * 0.42 };
 }
 
 // Slab-shouldered bronze construct: squared off, riveted, no soft edges.
-function frameColossus(e, cy) {
+function frameColossus(e, cy, skin) {
   const r = e.radius, c = e.colors, x = e.x, ph = e.dist / 6;
   const sw = Math.sin(ph);
-  ctx.fillStyle = c.dark;                                    // pillar legs
-  for (const sgn of [-1, 1]) {
-    ctx.beginPath();
-    ctx.roundRect(x + sgn * r * 0.34 - r * 0.16, cy + r * 0.42 + sgn * sw * r * 0.06,
-      r * 0.32, r * 0.6, r * 0.08);
-    ctx.fill();
+  const lw = inkWidth(r);
+  for (const sgn of [-1, 1]) {                               // pillar legs
+    inkedFill(() => ctx.roundRect(x + sgn * r * 0.34 - r * 0.16,
+      cy + r * 0.42 + sgn * sw * r * 0.06, r * 0.32, r * 0.6, r * 0.08), c.dark, lw);
   }
   const g = ctx.createLinearGradient(x - r, cy - r, x + r, cy + r);
   g.addColorStop(0, c.light); g.addColorStop(0.5, c.mid); g.addColorStop(1, c.dark);
-  ctx.fillStyle = g;
-  ctx.beginPath();
-  ctx.roundRect(x - r * 0.72, cy - r * 0.5, r * 1.44, r * 1.05, r * 0.14);  // torso block
-  ctx.fill();
-  ctx.strokeStyle = "rgba(255,240,200,0.35)";
-  ctx.lineWidth = Math.max(1, r * 0.06);
-  ctx.stroke();
+  inkedFill(() => ctx.roundRect(x - r * 0.72, cy - r * 0.5, r * 1.44, r * 1.05, r * 0.14),
+    g, lw);                                                  // torso block
+  skin(x, cy + r * 0.02, r * 0.68, r * 0.5);
   for (const sgn of [-1, 1]) {                               // rivets
-    ctx.fillStyle = "rgba(255,245,215,0.75)";
+    ctx.fillStyle = "rgba(255,245,215,0.8)";
     ctx.beginPath();
     ctx.arc(x + sgn * r * 0.5, cy - r * 0.28, r * 0.07, 0, Math.PI * 2);
     ctx.fill();
   }
   const hy = cy - r * 0.78;
-  ctx.fillStyle = c.mid;
-  ctx.beginPath();
-  ctx.roundRect(x - r * 0.34, hy - r * 0.3, r * 0.68, r * 0.6, r * 0.1);    // head block
-  ctx.fill();
-  return { hx: x, hy, hr: r * 0.36,
-           bx: x, by: cy + r * 0.02, brx: r * 0.72, bry: r * 0.5 };
+  inkedFill(() => ctx.roundRect(x - r * 0.34, hy - r * 0.3, r * 0.68, r * 0.6, r * 0.1),
+    c.mid, lw);                                              // head block
+  return { hx: x, hy, hr: r * 0.36 };
 }
 
 const FRAMES = {
@@ -1171,6 +1176,13 @@ export function drawEnemy(e) {
   if (e.flying) drawWings(e.x, cy, r, e.colors);
 
   const frame = FRAMES[art.frame] || frameBiped;
+  // The frame calls this the moment it has drawn its torso and before it draws
+  // its head, which is what lets a skin use the real body — see the note above
+  // the frames.
+  const skinFn = art.skin && SKINS[art.skin];
+  const paintSkin = skinFn
+    ? (bx, by, brx, bry) => skinFn({ bx, by, brx, bry }, e.colors, e)
+    : () => {};
   let head;
   if (art.scale && art.scale !== 1) {
     // Scale the whole figure about its feet so bigger creatures stand on the
@@ -1179,14 +1191,10 @@ export function drawEnemy(e) {
     ctx.translate(e.x, cy + r * 0.9);
     ctx.scale(art.scale, art.scale);
     ctx.translate(-e.x, -(cy + r * 0.9));
-    head = frame(e, cy);
+    head = frame(e, cy, paintSkin);
   } else {
-    head = frame(e, cy);
+    head = frame(e, cy, paintSkin);
   }
-
-  // Material goes on before the head gear, so a helmet sits on top of the
-  // armour rather than under it.
-  if (art.skin && SKINS[art.skin]) SKINS[art.skin](head, e.colors, e);
 
   // Face, unless a helm, cowl or skull is standing in for one.
   const hidden = FACE_CRESTS.has(art.crest);
