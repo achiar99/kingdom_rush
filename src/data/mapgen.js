@@ -1,13 +1,17 @@
-// Seeded map generation: a road across the battlefield, and the build spots
-// that overlook it.
+// From blueprint to battlefield: the machinery that turns a hand-authored
+// route layout (see layouts.js) into a playable map.
 //
-// Fifty hand-drawn maps would be fifty designs invented once and never
-// revisited. Generating them from a seed means the *shape* of a good map is
-// written down as rules instead — and a level that plays badly is fixed by
-// changing one number, then re-checked by the balance harness in tools/sim.
+// The routes themselves are designed, not generated — fifty distinct roads
+// are a design problem, and rules kept producing fifty variations of the same
+// maze. What stays procedural is everything that must be MEASURED rather than
+// drawn: seeded jitter so a blueprint doesn't look traced from a ruler, the
+// spline that turns control points into a road, build-spot placement scored
+// by actual coverage, and the exposure-band validation that keeps every map's
+// defensibility inside the range the balance harness was tuned against.
 //
-// Determinism matters: the same seed must always produce the same map, or
-// saved progress and simulated balance would both drift under the player.
+// Determinism matters: the same seed and blueprint must always produce the
+// same map, or saved progress and simulated balance would both drift under
+// the player.
 import { CONFIG } from "../config.js";
 import { dist, pathLength, pointAtDistance, nearestPointOnPath } from "../geometry.js";
 
@@ -25,246 +29,30 @@ function rng(seed) {
   };
 }
 
-// ------------------------------------------------------------------- road
-// Every map is a serpentine: creeps sweep across the field, drop to the next
-// lane, sweep back. That skeleton is what makes tower placement interesting —
-// a spot between two lanes covers both — but drawn literally it's a ladder of
-// right angles, and fifty of those look like fifty of the same map.
+// ------------------------------------------------------------------ jitter
+// A blueprint drawn dead-on would betray its control points. Each interior
+// point gets a small seeded nudge; endpoints stay put (they anchor the road
+// to its off-screen entry and exit).
 //
-// So the skeleton is only a set of control points. Each lane gets a couple of
-// waypoints pushed off to the side so the road bows instead of running dead
-// straight, and the whole thing is then drawn as a spline: the corners become
-// sweeping bends and the straights breathe. `lanes` (3-5) stays the main
-// variety knob — more lanes means a longer road and more double-covered spots.
-function skeleton(rand, lanes) {
-  const margin = 62;
-  const laneGap = (H - margin * 2) / (lanes - 1);
-  const ys = [];
-  for (let i = 0; i < lanes; i++) {
-    // jitter each lane, but by less than half the gap so two can never meet
-    const jitter = (rand() - 0.5) * laneGap * 0.4;
-    ys.push(Math.round(margin + i * laneGap + jitter));
-  }
-  if (rand() < 0.5) ys.reverse();          // enter from the bottom half the time
-
-  // How far a lane may bow away from its nominal height. Kept well under half
-  // the lane gap: a road that wanders is good, two lanes touching is not.
-  const bow = Math.min(46, laneGap * 0.3);
-
-  let goingRight = rand() < 0.5;
-  const pts = [{ x: goingRight ? -30 : W + 30, y: ys[0] }];
-
-  for (let i = 0; i < lanes; i++) {
-    const y = ys[i];
-    const last = i === lanes - 1;
-    const startX = pts[pts.length - 1].x;
-    const endX = last ? (goingRight ? W + 30 : -30)
-                      : (goingRight ? W - Math.round(60 + rand() * 130)
-                                    : Math.round(60 + rand() * 130));
-
-    // Two waypoints along the lane, nudged up or down, so the straight becomes
-    // a shallow S or a bow rather than a ruled line.
-    for (const frac of [0.34, 0.68]) {
-      pts.push({
-        x: Math.round(startX + (endX - startX) * frac),
-        y: Math.round(y + (rand() - 0.5) * 2 * bow),
-      });
-    }
-    pts.push({ x: endX, y });
-
-    if (!last) {
-      // The turn: one point offset diagonally into the corner, so the spline
-      // rounds it into a hairpin instead of folding at 90°.
-      const nextY = ys[i + 1];
-      const lead = (goingRight ? 1 : -1) * Math.round(26 + rand() * 34);
-      pts.push({ x: endX + lead, y: Math.round((y + nextY) / 2) });
-      pts.push({ x: endX, y: nextY });
-      goingRight = !goingRight;
-    }
-  }
-  return pts;
-}
-
-// An organic wandering road — the Kingdom Rush look. The serpentine's tell is
-// that every crossing is horizontal and wall-to-wall; a real map's road hooks,
-// staircases, doubles back, and enters and leaves on whatever edges it likes.
-//
-// The generator is a SELF-AVOIDING WALK on a coarse grid: entry and exit cells
-// on two different edges, a randomized depth-first search for a route between
-// them that visits at least `minCells` cells, then the cell centres (jittered)
-// become spline control points. Self-avoidance on the grid is what guarantees
-// the road never crosses itself and parallel corridors keep a full cell of
-// clearance — properties the serpentine got from its lane structure, kept here
-// without the lanes.
-function wanderSkeleton(rand) {
-  const COLS = 7, ROWS = 4;
-  const cw = W / COLS, ch = H / ROWS;
-  const idx = (c, r) => r * COLS + c;
-
-  // entry and exit on two different edges, never adjacent corners
-  const edgeCells = {
-    left: Array.from({ length: ROWS }, (_, r) => [0, r]),
-    right: Array.from({ length: ROWS }, (_, r) => [COLS - 1, r]),
-    top: Array.from({ length: COLS }, (_, c) => [c, 0]),
-    bottom: Array.from({ length: COLS }, (_, c) => [c, ROWS - 1]),
-  };
-  const edges = Object.keys(edgeCells);
-  const e1 = edges[Math.floor(rand() * 4)];
-  let e2 = edges[Math.floor(rand() * 4)];
-  while (e2 === e1) e2 = edges[Math.floor(rand() * 4)];
-  const pick = (edge) => edgeCells[edge][Math.floor(rand() * edgeCells[edge].length)];
-  const start = pick(e1), goal = pick(e2);
-
-  // Randomized DFS for a self-avoiding path between the length bounds. The
-  // first cut demanded 22+ cells, which filled the field like a hedge maze —
-  // a road, not a labyrinth, is the brief: cross the map, hook a few times,
-  // leave. The upper bound matters as much as the lower one.
-  const minCells = 15, maxCells = 19;
-  const visited = new Uint8Array(COLS * ROWS);
-  const walk = [];
-  let calls = 0;
-  const dfs = (c, r) => {
-    if (++calls > 30000) return false;             // determinism-safe bailout
-    visited[idx(c, r)] = 1;
-    walk.push([c, r]);
-    if (c === goal[0] && r === goal[1]
-        && walk.length >= minCells && walk.length <= maxCells) return true;
-    const dirs = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-      .map((d) => ({ d, k: rand() }))
-      .sort((a, b) => a.k - b.k)
-      .map((o) => o.d);
-    for (const [dc, dr] of dirs) {
-      const nc = c + dc, nr = r + dr;
-      if (nc < 0 || nc >= COLS || nr < 0 || nr >= ROWS) continue;
-      if (visited[idx(nc, nr)]) continue;
-      if (dfs(nc, nr)) return true;
-    }
-    visited[idx(c, r)] = 0;
-    walk.pop();
-    return false;
-  };
-  if (!dfs(start[0], start[1])) return null;       // caller tries the next seed
-
-  // cells -> jittered control points, plus off-screen extensions at both ends
-  // Jitter capped at ±24% of a cell: at ±34% two adjacent corridors could
-  // close to ~70px, and the road is painted ~65px wide with its fringe — the
-  // generator's clearance floor has to stay above what the renderer paints.
-  const centre = ([c, r]) => ({
-    x: Math.round((c + 0.5) * cw + (rand() - 0.5) * cw * 0.24),
-    y: Math.round((r + 0.5) * ch + (rand() - 0.5) * ch * 0.24),
-  });
-  const pts = walk.map(centre);
-  // Top-edge roads barely leave the world: the sky band sits directly above
-  // it on the canvas, and a full 30px extension would have creeps marching
-  // over the mountains before they reach the field. 8px keeps the spawn just
-  // behind the horizon's fade.
-  const off = (edge, p) =>
-    edge === "left" ? { x: -30, y: p.y } : edge === "right" ? { x: W + 30, y: p.y }
-    : edge === "top" ? { x: p.x, y: -8 } : { x: p.x, y: H + 30 };
-  pts.unshift(off(e1, pts[0]));
-  pts.push(off(e2, pts[pts.length - 1]));
-  return pts;
-}
-
-// A rectangular spiral coiling inward, the temple at its heart. The same few
-// control-point tricks as the serpentine — bowed legs, rounded corners — but
-// the geometry says something different: the whole map wraps around the thing
-// you are defending, and the creeps close in from every side as they walk.
-function spiralSkeleton(rand) {
-  const m = 54 + Math.round(rand() * 8);          // outer margin
-  const g = 88 + Math.round(rand() * 14);         // gap between coils
-  const mirrored = rand() < 0.5;                  // enter left or right
-  const flipped = rand() < 0.5;                   // clockwise or counter
-  const X = (x) => (mirrored ? W - x : x);
-  const Y = (y) => (flipped ? H - y : y);
-  const bow = 13;                                 // small: coils must not touch
-
-  const pts = [{ x: X(-30), y: Y(m) }];
-  // Each entry: [corner-x, corner-y] in unmirrored space; legs between corners
-  // get one bowed midpoint so the coil breathes without risking a collision.
-  // One outer ring, half an inner one, then the heart — the 2.25-turn version
-  // measured ~4,600px of road, a third longer than any other archetype.
-  const corners = [
-    [W - m, m], [W - m, H - m], [m, H - m], [m, m + g],
-    [W / 2 + 90, m + g], [W / 2 + 90, H / 2],
-  ];
-  let prev = pts[0];
-  for (const [cx, cy] of corners) {
-    const c = { x: X(cx), y: Y(cy) };
-    pts.push({
-      x: Math.round((prev.x + c.x) / 2 + (rand() - 0.5) * 2 * bow * (prev.x === c.x ? 1 : 0)),
-      y: Math.round((prev.y + c.y) / 2 + (rand() - 0.5) * 2 * bow * (prev.y === c.y ? 1 : 0)),
-    });
-    pts.push(c);
-    prev = c;
-  }
-  // the last step into the heart, where the temple stands
-  pts.push({ x: X(W / 2 - 40), y: Y(H / 2) });
-  return pts;
-}
-
-// Two armies, one gate: a pair of roads that enter separately, serpentine
-// through their own halves of the field, and MERGE into a single shared road
-// to the temple. Returns two full control-point routes whose tails are the
-// same points — each is smoothed into its own polyline, and a creep walks one
-// or the other.
-//
-// This is the "hard level" shape: until the merge your towers can only ever
-// see half the traffic, and the ground that watches both branches at once —
-// around the merge and along the shared tail — is suddenly the most valuable
-// real estate on the map.
-function forkSkeleton(rand) {
-  // Six heights: two crossings per branch, the merge midway between the inner
-  // lanes. Branches enter together on one side, each sweeps its half of the
-  // field, and the merged road runs one final crossing out the other side —
-  // short, and unmistakably a Y when creeps stream down both arms.
-  const m = 56;
-  const gap = (H - m * 2) / 5;
-  const ys = [];
-  for (let i = 0; i < 6; i++) ys.push(Math.round(m + i * gap + (rand() - 0.5) * gap * 0.25));
-  const mirrored = rand() < 0.5;
-  const X = (x) => (mirrored ? W - x : x);
-  const bow = Math.min(14, gap * 0.16);
-  const farX = W - 100 - Math.round(rand() * 22);
-  const nearX = 78 + Math.round(rand() * 22);
-
-  const lane = (pts, fromX, toX, y) => {
-    for (const f of [0.34, 0.68])
-      pts.push({ x: Math.round(X(fromX + (toX - fromX) * f)),
-                 y: Math.round(y + (rand() - 0.5) * 2 * bow) });
-    pts.push({ x: X(toX), y });
-  };
-  const turn = (pts, x, yFrom, yTo, dir) => {
-    pts.push({ x: X(x + dir * (26 + rand() * 30)), y: Math.round((yFrom + yTo) / 2) });
-    pts.push({ x: X(x), y: yTo });
-  };
-
-  const midY = Math.round((ys[2] + ys[3]) / 2);
-  const M = { x: X(nearX), y: midY };
-
-  // branch A: enters top, one crossing out and one back, down into the merge
-  const A = [{ x: X(-30), y: ys[0] }];
-  lane(A, -30, farX, ys[0]);
-  turn(A, farX, ys[0], ys[1], 1);
-  lane(A, farX, nearX, ys[1]);
-  turn(A, nearX, ys[1], midY, -1);
-
-  // branch B: the mirror of A through the bottom half
-  const B = [{ x: X(-30), y: ys[5] }];
-  lane(B, -30, farX, ys[5]);
-  turn(B, farX, ys[5], ys[4], 1);
-  lane(B, farX, nearX, ys[4]);
-  turn(B, nearX, ys[4], midY, -1);
-
-  // the shared road: ONE control-point array reused by both routes, so the
-  // merged stretch is pixel-identical rather than two wobbling copies
-  const shared = [M];
-  lane(shared, nearX, W + 30, midY);
-
-  return [
-    [...A, ...shared],
-    [...B, ...shared],
-  ];
+// Crucially, jitter is applied PER POINT, not per route: a fork's merged tail
+// is the same point arrays spliced into every route, and jittering by
+// identity (the Map below) moves a shared point once, so every route still
+// agrees exactly on where the roads meet. ±7px is small enough that the
+// authored 100px+ corridor clearances survive.
+const JITTER = 7;
+function jitterRoutes(routes, rand) {
+  const moved = new Map();
+  return routes.map((route) =>
+    route.map((pt, i) => {
+      if (moved.has(pt)) return moved.get(pt);
+      const anchor = i === 0 || i === route.length - 1;
+      const p = anchor
+        ? { x: pt[0], y: pt[1] }
+        : { x: Math.round(pt[0] + (rand() * 2 - 1) * JITTER),
+            y: Math.round(pt[1] + (rand() * 2 - 1) * JITTER) };
+      moved.set(pt, p);
+      return p;
+    }));
 }
 
 // Centripetal Catmull-Rom through the control points, tessellated into a dense
@@ -337,8 +125,8 @@ function candidateSpots(routes, rand) {
 }
 
 // How much road a tower here would watch — the same coverage measure the
-// balance harness's bot uses to judge a spot, so generated maps are scored
-// by the criterion they'll actually be played against.
+// balance harness's bot uses to judge a spot, so maps are scored by the
+// criterion they'll actually be played against.
 function coverage(samples, x, y, range) {
   let n = 0;
   for (const p of samples) if (dist(x, y, p.x, p.y) <= range) n++;
@@ -386,16 +174,17 @@ function pickSpots(routes, rand, count) {
 }
 
 // ------------------------------------------------------- defensibility
-// How much tower fire a map affords: for every point on the road, how many
-// build spots could shoot it, integrated along the whole route and divided by
-// the number of spots. It is, near enough, the total damage one tower gets to
-// deal over one creep's journey — so it predicts how hard the map plays.
+// How much tower fire a map affords: the average length of road one build
+// spot watches. (Algebraically: for every point on the road, count the spots
+// that could shoot it, integrate along the route, divide by spot count.)
+// It is, near enough, the total damage one tower gets to deal over one
+// creep's journey — so it predicts how hard the map plays.
 //
-// This number is why generated maps need validating at all. Left unchecked,
-// it varied 2.1× across fifty seeds, and the balance harness showed that
-// variance swamping every intentional difficulty setting: two adjacent levels
-// with the same enemy HP measured 98% and 0% win rates purely because one
-// map's spots covered the road and the other's didn't.
+// This number is why maps need validating at all. Left unchecked it varied
+// 2.1× across fifty seeds of the old generator, and the balance harness
+// showed that variance swamping every intentional difficulty setting: two
+// levels with the same enemy HP measured 98% and 0% win rates purely because
+// one map's spots covered the road and the other's didn't.
 export function exposurePerSpot(path, spots, range = 130) {
   if (!spots.length) return 0;
   const len = pathLength(path);
@@ -407,53 +196,52 @@ export function exposurePerSpot(path, spots, range = 130) {
 }
 
 // The band a map has to land in to be used. Narrow on purpose: variety should
-// come from the shape of the route, not from whether it's defensible.
-// Re-derived after the campaign's roads were shortened ~30% (a road that
-// filled the field like a hedge maze was the complaint). Exposure scales with
-// route length, so the old [495, 545] became unreachable everywhere — these
-// come from measuring what the shortened shapes actually deliver: wander
-// medians 466, spiral 437, serpentine 472. hpScale was refit on top, so the
-// absolute number matters less than every map agreeing on it.
-export const EXPOSURE_BAND = [420, 480];
+// come from the shape of the route, not from whether it's defensible. The
+// hand-authored layouts are designed against it — corridors run 100-145px
+// apart precisely so a build spot between two passes watches both, which is
+// what lifts a spot's average coverage into this range.
+//
+// Re-derived for the hand-authored campaign (as it was re-derived when the
+// generated roads were shortened): most blueprints deliver 420-478, and the
+// deliberately compact shapes — staircases, weaves, the hooked L — bottom
+// out just above 400. The band is the lint that catches a blueprint whose
+// spots can't watch its road; the balance harness in tools/sim is what
+// actually prices the residual spread.
+export const EXPOSURE_BAND = [400, 480];
 
-// Forks keep their own lower floor: a fork route measures ~322-375 — ground
-// watching branch A isn't watching branch B, and the routes are short. Fork
-// maps are dealt two extra build spots in compensation (see levels.js), which
-// closes most of the gap; the rest is the hard-level edge they exist for.
-export const FORK_EXPOSURE_BAND = [330, 480];
+// Forks keep their own lower floor: ground watching branch A isn't watching
+// branch B, so the per-spot average over each single route sits lower even
+// on a well-designed map. Fork maps are dealt two extra build spots per
+// extra route in compensation (see levels.js); the rest is the hard-level
+// edge forks exist for. Within the band the shapes stratify on purpose:
+// plain Y-merges measure 320+, split-and-rejoin diamonds ~300+, and the two
+// tridents and the double diamond — each stage-arc's deliberate hardest —
+// sit down near the floor.
+export const FORK_EXPOSURE_BAND = [285, 480];
 
 // ------------------------------------------------------------------ entry
-// `seed` is the starting point, not necessarily the seed used: candidates are
-// generated from consecutive seeds until one lands inside EXPOSURE_BAND, so
-// the result is still fully deterministic but guaranteed playable. Falls back
-// to the closest candidate if the band can't be hit.
-export function generateMap(seed, { spots = 9, lanes = null, tries = 60, archetype = "serpentine" } = {}) {
-  const [lo, hi] = archetype === "fork" ? FORK_EXPOSURE_BAND : EXPOSURE_BAND;
+// `seed` picks the jitter, not the shape: the blueprint's control points are
+// nudged from consecutive seeds until the finished map lands inside the
+// exposure band, so the result is fully deterministic AND guaranteed
+// defensible. Falls back to the closest candidate if the band can't be hit —
+// a blueprint that misses consistently is an authoring bug, and
+// tools/check-maps.js exists to catch it before it ships.
+export function generateMap(seed, { spots = 9, layout, tries = 40 } = {}) {
+  const multi = layout.routes.length > 1;
+  const [lo, hi] = layout.band || (multi ? FORK_EXPOSURE_BAND : EXPOSURE_BAND);
   let best = null;
 
   for (let attempt = 0; attempt < tries; attempt++) {
     const rand = rng(seed + attempt * 101);
-    const laneCount = lanes ?? 3 + Math.floor(rand() * 2); // 3-4 — 5 outran every other archetype
-
-    // One archetype, one to two routes. Every route ends at the same exit, so
-    // there is always exactly one temple.
-    let routes;
-    if (archetype === "spiral") routes = [smooth(spiralSkeleton(rand))];
-    else if (archetype === "fork") routes = forkSkeleton(rand).map((c) => smooth(c));
-    else if (archetype === "wander") {
-      const c = wanderSkeleton(rand);
-      if (!c) continue;                            // walk not found; next seed
-      routes = [smooth(c)];
-    }
-    else routes = [smooth(skeleton(rand, laneCount))];
-
+    const routes = jitterRoutes(layout.routes, rand).map((c) => smooth(c));
     const picked = pickSpots(routes, rand, spots);
     // A map qualifies only if EVERY route sits inside the band — on a fork, a
     // creep walks one branch or the other, so each branch alone has to afford
     // the fire the campaign's difficulty math assumes.
     const exposures = routes.map((r) => exposurePerSpot(r, picked));
     const candidate = {
-      path: routes[0], routes, spots: picked, lanes: laneCount, archetype,
+      path: routes[0], routes, spots: picked,
+      lanes: layout.routes.length, archetype: layout.archetype, motif: layout.motif,
       exposure: Math.min(...exposures),
       length: Math.round(pathLength(routes[0])),
       seedUsed: seed + attempt * 101,
@@ -464,10 +252,5 @@ export function generateMap(seed, { spots = 9, lanes = null, tries = 60, archety
     const miss = Math.max(...exposures.map((e) => Math.abs(e - mid)));
     if (!best || miss < best.miss) best = { candidate, miss };
   }
-  // Only reachable if every attempt failed to produce a candidate at all —
-  // e.g. a wander seed whose walk search bottomed out every try. One more
-  // pass with the serpentine, which cannot fail, beats returning null into
-  // fifty call sites that never expect it.
-  if (!best) return generateMap(seed + 7717, { spots, lanes, tries, archetype: "serpentine" });
   return best.candidate;
 }

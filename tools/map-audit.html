@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Tower Realm — all fifty maps</title>
+<style>
+  body { margin: 0; background: #1b1f2a; color: #e8ecf4;
+         font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px; }
+  h1 { font-size: 18px; margin: 0 0 4px; }
+  p.note { color: #9aa4bd; font-size: 13px; margin: 0 0 16px; max-width: 760px; line-height: 1.5; }
+  canvas { display: block; border-radius: 10px; background: #2b3040;
+           max-width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<h1 id="title">🗺️ Every map in the campaign</h1>
+<p class="note">
+  One stage's ten levels per sheet (<code>?stage=0..4</code>), five per row —
+  the sheet the layout pass is judged on. Every road here is a hand-authored
+  blueprint from <code>src/data/layouts.js</code>; reload after editing one.
+  Served from the dev server: <code>/tools/map-audit.html</code>
+</p>
+<!-- render/canvas.js binds to #game at import time, so it has to exist first -->
+<canvas id="game" width="1520" height="500"></canvas>
+<script type="module">
+  import { loadLevel } from "../src/state.js";
+  import { drawSky, drawGround } from "../src/render/terrain.js";
+  import { LEVELS, STAGES } from "../src/data/levels.js";
+  import { ctx } from "../src/render/canvas.js";
+
+  const stage = Math.min(4, Math.max(0, Number(new URLSearchParams(location.search).get("stage") ?? 0)));
+  document.getElementById("title").textContent =
+    `🗺️ Stage ${stage + 1} — ${STAGES[stage].name}`;
+
+  const COLS = 5, CW = 1520 / COLS, RH = 500 / 2;
+  const SKY = 96;
+  const k = Math.min((CW - 12) / 900, (RH - 26) / (560 + SKY));
+
+  function label(text, x, y, color = "#e8ecf4") {
+    ctx.fillStyle = color;
+    ctx.font = "700 11px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, x, y);
+  }
+
+  ctx.clearRect(0, 0, 1520, 500);
+  for (let i = 0; i < 10; i++) {
+    const idx = stage * 10 + i;
+    const lvl = LEVELS[idx];
+    loadLevel(idx);
+    const cx = (i % COLS) * CW + 6, cy = Math.floor(i / COLS) * RH + 4;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(k, k);
+    drawSky();
+    ctx.translate(0, SKY);
+    drawGround();
+    ctx.restore();
+    label(`${lvl.index}  ${lvl.name} — ${lvl.motif}`,
+      cx + (CW - 12) / 2, cy + (560 + SKY) * k + 10,
+      lvl.routes.length > 1 ? "#ffcf52" : "#e8ecf4");
+  }
+</script>
+</body>
+</html>

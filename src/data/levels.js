@@ -1,14 +1,16 @@
 // The fifty levels of the campaign, assembled rather than typed out.
 //
-// Each level is its stage's difficulty band read at its position, plus a map
-// and a wave table generated from a seed derived from its index. Everything
-// is deterministic: level 34 is the same level on every machine, every run,
+// Each level is its stage's difficulty band read at its position, plus a
+// hand-authored route blueprint (layouts.js) built into a map, and a wave
+// table generated from a seed derived from its index. Everything is
+// deterministic: level 34 is the same level on every machine, every run,
 // and — importantly — the same level the balance harness measured.
 //
 // LEVELS stays a flat array indexed 0..49, because that's what save slots,
 // unlocks and tools/sim all key off. `stageIndex` / `levelInStage` are along
 // for the ride whenever something needs the two-dimensional view.
 import { generateMap } from "./mapgen.js";
+import { LAYOUTS } from "./layouts.js";
 import { generateWaves } from "./waves.js";
 import { STAGES, THEMES, LEVELS_PER_STAGE, CAMPAIGN, band, bandInt, goldForHpScale } from "./stages.js";
 
@@ -55,23 +57,24 @@ const ramp = ([a, b], index) => a + (b - a) * (index / (TOTAL_LEVELS - 1));
 function buildLevel(stage, stageIndex, levelInStage) {
   const index = stageIndex * LEVELS_PER_STAGE + levelInStage;
   const spots = Math.round(ramp(CAMPAIGN.spots, index));
-  // The route archetype cycles within each stage. WANDER — an organic road
-  // that hooks and staircases between any two edges — is the bread and butter;
-  // the 4th and 7th levels coil into a spiral (the temple in the heart of the
-  // maze); the 6th and 9th are FORKS — two roads that merge — which split the
-  // player's attention and are this campaign's "hard level" shape. The finale
-  // (10th) keeps the classic serpentine: the master fights are tuned on it,
-  // and its wall-to-wall lanes are the strongest arena for a set-piece boss.
-  // Three forks a stage now — they were two, tucked at slots 6 and 9, and the
-  // most-asked question about the campaign was "why don't levels have merged
-  // paths": they did, but a player could reach level 6 without meeting one.
-  const ARCH = { 2: "fork", 3: "spiral", 5: "fork", 6: "spiral", 8: "fork", 9: "serpentine" };
-  const archetype = ARCH[levelInStage] || "wander";
-  // Fork maps deal two extra build spots: two roads split the towers'
-  // attention, and the extra ground is most of the compensation (the rest is
-  // the hard-level edge forks are placed for — see FORK_EXPOSURE_BAND).
+  // Every level's route is a hand-authored blueprint — see layouts.js for the
+  // full vocabulary (wanders, Y-forks, diamonds, tridents, coils, staircases,
+  // and each stage's serpentine finale). The rhythm within a stage keeps the
+  // old cadence — forks at the 3rd/6th/9th levels as the "hard level" shape,
+  // coils at the 4th/7th, the finale a serpentine arena for the master fight —
+  // but every single blueprint is its own map.
+  const layout = LAYOUTS[index];
+  // Multi-route maps deal two extra build spots per extra road: the roads
+  // split the towers' attention, and the extra ground is most of the
+  // compensation (the rest is the hard-level edge forks are placed for — see
+  // FORK_EXPOSURE_BAND). A layout may also trim its own count (spotAdjust):
+  // exposure is *average road watched per spot*, so a compact map holds its
+  // defensibility band with fewer, better spots rather than by growing road
+  // it has no room for.
   const map = generateMap(mapSeed(index), {
-    spots: spots + (archetype === "fork" ? 2 : 0), archetype });
+    spots: Math.max(6,
+      spots + (layout.routes.length - 1) * 2 + (layout.spotAdjust || 0)),
+    layout });
   const waveCount = Math.round(ramp(CAMPAIGN.waveCount, index));
   const hpScale = Number(band(stage.hpScale, levelInStage).toFixed(2));
 
@@ -93,6 +96,7 @@ function buildLevel(stage, stageIndex, levelInStage) {
     path: map.path,
     routes: map.routes,
     archetype: map.archetype,
+    motif: map.motif,
     spots: map.spots,
     mapLanes: map.lanes,
     pathLength: map.length,

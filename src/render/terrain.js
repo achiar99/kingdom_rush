@@ -82,10 +82,12 @@ function paintScenery() {
   frameGround(g, THEME);
 
   // Secondary routes first, primary last, so where a fork's branches merge the
-  // primary's paving sits on top and the joint reads as one road.
-  const tight = LEVEL.archetype === "fork" || LEVEL.archetype === "serpentine";
+  // primary's paving sits on top and the joint reads as one road. Every route
+  // gets the full-width swathe: the hand-authored layouts guarantee 100px+
+  // between corridors, so the old narrow-road compensation for cramped fork
+  // and serpentine lanes is gone with the cramped lanes themselves.
   for (let i = routes.length - 1; i >= 0; i--)
-    paveRoad(g, routes[i], THEME, tight ? 0.72 : 1);
+    paveRoad(g, routes[i], THEME);
   scatterProps(g, routes, BUILD_SPOTS, LEVEL.stageId, LEVEL.index + 1);
 
   // Every build spot's dirt patch, part of the ground itself. A tower built
