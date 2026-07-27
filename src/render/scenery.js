@@ -53,9 +53,11 @@ export function paveRoad(g, path, theme, widthScale = 1) {
   // clearance floor, not just the reference art. `widthScale` extends the same
   // rule to the other shapes: fork and serpentine lanes run as close as ~45px,
   // so those maps paint the road at 0.72 of this.
+  // Long, calm undulations. The first cut wobbled at twice this frequency and
+  // amplitude and the edges read as a lumpy worm rather than a confident road.
   const halfW = (d) =>
     26 * widthScale *
-    (1 + 0.10 * Math.sin(d * 0.021 + ph) + 0.07 * Math.sin(d * 0.049 + ph * 2.7));
+    (1 + 0.06 * Math.sin(d * 0.011 + ph) + 0.04 * Math.sin(d * 0.027 + ph * 2.7));
 
   // sample centreline + normals once
   const C = [], N = [], WD = [];
@@ -101,26 +103,30 @@ export function paveRoad(g, path, theme, widthScale = 1) {
 
   // grass tufts biting into the verge — the scalloped edge that makes it read
   // as ground and not as a drawn line
+  // Tufts sit OUTSIDE the verge, hugging it — straddling the edge they read
+  // as litter dropped on the road (worst on snow, where a pale-blue blob on
+  // pale-grey ice looks like a rendering error rather than a snowbank).
   const rand = rng(9173 + ((path[0].x | 0) << 3));
   g.fillStyle = theme.grass[1];
-  for (let i = 2; i < C.length - 2; i += 2) {
-    if (rand() < 0.35) continue;
+  for (let i = 2; i < C.length - 2; i += 2 + Math.floor(rand() * 3)) {
+    if (rand() < 0.45) continue;
     for (const side of [-1, 1]) {
-      if (rand() < 0.3) continue;
-      const w = WD[i] + 4;
-      const tx = C[i].x + N[i].x * w * side + (rand() - 0.5) * 4;
-      const ty = C[i].y + N[i].y * w * side + (rand() - 0.5) * 4;
-      const rr = 2.5 + rand() * 4.5;
+      if (rand() < 0.4) continue;
+      const w = WD[i] + 7 + rand() * 2;
+      const tx = C[i].x + N[i].x * w * side;
+      const ty = C[i].y + N[i].y * w * side;
+      const rr = 2 + rand() * 3;
       g.beginPath();
       // squash the tuft along the road direction so the edge scallops
-      g.ellipse(tx, ty, rr * 1.5, rr, Math.atan2(N[i].x, -N[i].y), 0, Math.PI * 2);
+      g.ellipse(tx, ty, rr * 1.6, rr, Math.atan2(N[i].x, -N[i].y), 0, Math.PI * 2);
       g.fill();
     }
   }
 
-  // speckles and the odd pebble worn into the dirt
-  for (let i = 1; i < C.length - 1; i += 3) {
-    if (rand() < 0.4) continue;
+  // speckles and the odd pebble worn into the dirt — at RANDOM spacing. On a
+  // fixed stride they lined the road like beads on a string.
+  for (let i = 1; i < C.length - 1; i += 2 + Math.floor(rand() * 7)) {
+    if (rand() < 0.45) continue;
     const off = (rand() * 2 - 1) * WD[i] * 0.7;
     const px = C[i].x + N[i].x * off, py = C[i].y + N[i].y * off;
     if (rand() < 0.85) {
@@ -139,6 +145,388 @@ export function paveRoad(g, path, theme, widthScale = 1) {
       g.fill();
     }
   }
+}
+
+// ------------------------------------------------------- the frame & groves
+// What turns a green rectangle into a PLACE. Two layers, both cached:
+//
+//   frame   a dense border of the stage's own vegetation (or rock) walling
+//           the whole field in, with clean gaps where roads pass through —
+//           the playfield becomes a clearing something surrounds
+//   groves  a few large masses INSIDE the field, in the pockets the road
+//           left empty — so the road visibly bent around something, which is
+//           the difference between a route and a squiggle
+//
+// Neither touches a map, a spot or a stat: pure set dressing, and the single
+// biggest gap between these levels and the game they're modelled on.
+const FRAME_MIX = {
+  troy:      ["oliveTree", "cypress", "oliveTree", "shrub"],
+  arcadia:   ["cypress", "cypress", "oliveTree", "shrub"],
+  labyrinth: ["snowPine", "snowPine", "rock"],
+  hades:     ["rock", "deadTree", "rock"],
+  // No pale rock on Othrys: against near-black ash the standard grey rock
+  // glares like cotton. Obsidian and burnt trunks only.
+  olympus:   ["obsidian", "obsidian", "deadTree"],
+};
+
+export function frameGround(g, theme) {
+  // the darker forest-floor band the frame trees stand on
+  const band = 58;
+  const wob = (t) => 1 + 0.35 * Math.sin(t * 5.1) + 0.22 * Math.sin(t * 11.7);
+  g.fillStyle = mix(theme.grass[1], "#000000", 0.22);
+  g.beginPath();
+  g.moveTo(-4, -4);
+  g.lineTo(W + 4, -4);
+  g.lineTo(W + 4, H + 4);
+  g.lineTo(-4, H + 4);
+  g.closePath();
+  // punch out the middle with a wobbly inner rectangle (even-odd fill)
+  g.moveTo(band, band);
+  for (let x = band; x <= W - band; x += 30) g.lineTo(x, band * wob(x * 0.013));
+  for (let y = band; y <= H - band; y += 30) g.lineTo(W - band * wob(y * 0.017), y);
+  for (let x = W - band; x >= band; x -= 30) g.lineTo(x, H - band * wob(x * 0.011 + 2));
+  for (let y = H - band; y >= band; y -= 30) g.lineTo(band * wob(y * 0.019 + 4), y);
+  g.closePath();
+  g.fill("evenodd");
+}
+
+// Border forest, drawn AFTER the road so canopies layer naturally — gaps are
+// left wherever a route passes, so the road visibly breaks through the treeline.
+export function frameTrees(g, routes, spots, theme, stageId, seed) {
+  const rand = rng(seed * 48271 + 7);
+  const mixKeys = FRAME_MIX[stageId] || FRAME_MIX.troy;
+  const exit = routes[0][routes[0].length - 1];       // temple lives here
+
+  const roadDist = (x, y) => {
+    let d = Infinity;
+    for (const r of routes) {
+      const on = nearestPointOnPath(r, x, y);
+      d = Math.min(d, dist(x, y, on.x, on.y));
+    }
+    return d;
+  };
+
+  const placed = [];
+  const tryPlace = (x, y, scale) => {
+    if (roadDist(x, y) < 62) return;                  // the road's gap in the wall
+    if (dist(x, y, exit.x, exit.y) < 105) return;     // room for the temple
+    if (spots.some((sp) => dist(x, y, sp.x, sp.y) < 46)) return;
+    if (placed.some((p) => dist(x, y, p.x, p.y) < 21)) return;
+    placed.push({ x, y, key: mixKeys[Math.floor(rand() * mixKeys.length)],
+                  s: scale, r: rand() * 3 });
+  };
+
+  // Three staggered rows along each edge, packed tight — a WALL of canopy,
+  // not a picket line. Two sparse rows read as trees that happened to grow
+  // near the border; the point is a mass the field is carved out of.
+  for (const [inset, s0, s1] of [[8, 1.5, 2.0], [36, 1.15, 1.5], [62, 0.85, 1.15]]) {
+    for (let x = 6; x < W; x += 22 + rand() * 14)
+      tryPlace(x + rand() * 8, inset + rand() * 12, s0 + rand() * (s1 - s0));
+    for (let x = 6; x < W; x += 22 + rand() * 14)
+      tryPlace(x + rand() * 8, H - inset - rand() * 12, s0 + rand() * (s1 - s0));
+    for (let y = 30; y < H - 22; y += 22 + rand() * 14) {
+      tryPlace(inset + rand() * 12, y + rand() * 8, s0 + rand() * (s1 - s0));
+      tryPlace(W - inset - rand() * 12, y + rand() * 8, s0 + rand() * (s1 - s0));
+    }
+  }
+
+  placed.sort((a, b) => a.y - b.y);
+  for (const p of placed) {
+    g.save();
+    g.translate(p.x, p.y);
+    PROP_FNS[p.key](g, p.s, p.r);
+    g.restore();
+  }
+}
+
+// Interior masses in the road's dead pockets. Each is a wobbly patch of
+// forest floor with a handful of large props clustered on it.
+export function groves(g, routes, spots, theme, stageId, seed, landmark = null) {
+  const rand = rng(seed * 69621 + 3);
+  const mixKeys = FRAME_MIX[stageId] || FRAME_MIX.troy;
+
+  const roadDist = (x, y) => {
+    let d = Infinity;
+    for (const r of routes) {
+      const on = nearestPointOnPath(r, x, y);
+      d = Math.min(d, dist(x, y, on.x, on.y));
+    }
+    return d;
+  };
+
+  // find up to three pocket centres, greedily, far from everything
+  const centres = [];
+  for (let a = 0; a < 500 && centres.length < 3; a++) {
+    const x = 120 + rand() * (W - 240);
+    const y = 120 + rand() * (H - 240);
+    if (roadDist(x, y) < 86) continue;
+    if (spots.some((sp) => dist(x, y, sp.x, sp.y) < 72)) continue;
+    if (centres.some((c) => dist(x, y, c.x, c.y) < 170)) continue;
+    if (landmark && dist(x, y, landmark.x, landmark.y) < 150) continue;
+    centres.push({ x, y });
+  }
+
+  for (const c of centres) {
+    // forest-floor patch
+    const rr = 46 + rand() * 26;
+    g.fillStyle = mix(theme.grass[1], "#000000", 0.18);
+    g.beginPath();
+    for (let i = 0; i <= 16; i++) {
+      const a = (i / 16) * Math.PI * 2;
+      const w = 1 + 0.18 * Math.sin(a * 3 + c.x) + 0.12 * Math.sin(a * 5 + c.y);
+      const px = c.x + Math.cos(a) * rr * 1.12 * w;
+      const py = c.y + Math.sin(a) * rr * 0.78 * w;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fill();
+
+    // The mass itself: enough props to FILL the patch, spread uniformly over
+    // the disc (sqrt-radius). Five on the rim left the middle as a bare dark
+    // blob that read as a shadow, not a wood.
+    const members = [];
+    const n = 8 + Math.floor(rand() * 5);
+    for (let m = 0; m < n; m++) {
+      const a = rand() * Math.PI * 2;
+      const d0 = Math.sqrt(rand()) * rr * 0.95;
+      members.push({
+        x: c.x + Math.cos(a) * d0 * 1.15,
+        y: c.y + Math.sin(a) * d0 * 0.68,
+        key: mixKeys[Math.floor(rand() * mixKeys.length)],
+        s: 1.05 + rand() * 0.6, r: rand() * 3,
+      });
+    }
+    members.sort((a, b) => a.y - b.y);
+    for (const p of members) {
+      g.save();
+      g.translate(p.x, p.y);
+      PROP_FNS[p.key](g, p.s, p.r);
+      g.restore();
+    }
+  }
+}
+
+// ------------------------------------------------------------- landmarks
+// One per level: the thing that makes THIS level this level. Path shape and
+// palette make levels different; a landmark makes them memorable — "the one
+// with the lake", "the one with the war camp". Each stage carries two
+// variants and alternates them by level seed, so no two consecutive levels
+// of a stage share one.
+function lmPond(g, x, y, theme, seed, frozen = false, lava = false) {
+  const rand = rng(seed * 31 + 5);
+  const rot = rand() * 3;
+  const blob = (rx, ry, fill) => {
+    g.fillStyle = fill;
+    g.beginPath();
+    for (let i = 0; i <= 18; i++) {
+      const a = (i / 18) * Math.PI * 2;
+      const w = 1 + 0.14 * Math.sin(a * 3 + rot) + 0.1 * Math.sin(a * 5 + rot * 2);
+      const px = x + Math.cos(a) * rx * w, py = y + Math.sin(a) * ry * w;
+      if (i === 0) g.moveTo(px, py); else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fill();
+  };
+  blob(64, 42, mix(theme.grass[1], "#000000", 0.3));            // bank shadow
+  if (lava) {
+    blob(56, 36, "#2a1712");
+    blob(48, 30, "#ff7a26");
+    blob(34, 20, "#ffc258");
+    g.strokeStyle = "rgba(40,16,8,0.85)";                       // crust plates
+    g.lineWidth = 2;
+    for (let i = 0; i < 5; i++) {
+      g.beginPath();
+      const a = rand() * Math.PI * 2, d = rand() * 26;
+      g.moveTo(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.6);
+      g.lineTo(x + Math.cos(a) * (d + 18), y + Math.sin(a) * (d + 18) * 0.6);
+      g.stroke();
+    }
+  } else if (frozen) {
+    blob(56, 36, "#b9cfdf");
+    blob(46, 29, "#d7e7f2");
+    g.strokeStyle = "rgba(120,150,175,0.55)";                   // cracks
+    g.lineWidth = 1.4;
+    for (let i = 0; i < 3; i++) {
+      g.beginPath();
+      g.moveTo(x - 30 + rand() * 20, y - 14 + rand() * 12);
+      g.lineTo(x + rand() * 24, y + (rand() - 0.5) * 10);
+      g.lineTo(x + 20 + rand() * 18, y - 8 + rand() * 18);
+      g.stroke();
+    }
+  } else {
+    blob(56, 36, "#2f6b78");
+    blob(48, 30, "#3f8896");
+    g.fillStyle = "rgba(255,255,255,0.25)";                     // sky glint
+    g.beginPath();
+    g.ellipse(x - 12, y - 8, 20, 8, -0.4, 0, Math.PI * 2);
+    g.fill();
+    g.strokeStyle = "#3f6b2c";                                  // reeds
+    g.lineWidth = 1.6;
+    g.lineCap = "round";
+    for (let i = 0; i < 5; i++) {
+      const rx = x + (rand() - 0.5) * 100, ry = y + 24 + rand() * 12;
+      g.beginPath();
+      g.moveTo(rx, ry);
+      g.quadraticCurveTo(rx + 2, ry - 10, rx + (rand() - 0.5) * 6, ry - 16);
+      g.stroke();
+    }
+  }
+}
+
+// A ring of standing stones — Greek enough as a rustic sanctuary, and it
+// works in every biome by borrowing the stage's own rock prop.
+function lmStones(g, x, y, theme, seed, key = "rock") {
+  const rand = rng(seed * 37 + 1);
+  g.fillStyle = mix(theme.grass[1], "#000000", 0.2);
+  g.beginPath();
+  g.ellipse(x, y, 58, 36, 0, 0, Math.PI * 2);
+  g.fill();
+  const n = 6;
+  const members = [];
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2 + rand() * 0.3;
+    members.push({ x: x + Math.cos(a) * 46, y: y + Math.sin(a) * 27,
+                   s: 0.9 + rand() * 0.4, r: rand() * 3 });
+  }
+  members.sort((a, b) => a.y - b.y);
+  for (const m of members) {
+    g.save();
+    g.translate(m.x, m.y);
+    PROP_FNS[key](g, m.s, m.r);
+    g.restore();
+  }
+}
+
+// A war camp: two striped tents, a fire, a stack of logs.
+function lmCamp(g, x, y, theme, seed) {
+  const rand = rng(seed * 41 + 9);
+  g.fillStyle = mix(theme.grass[1], "#000000", 0.18);
+  g.beginPath();
+  g.ellipse(x, y + 4, 62, 34, 0, 0, Math.PI * 2);
+  g.fill();
+  const tent = (tx, ty, sc, cloth) => {
+    g.save();
+    g.translate(tx, ty);
+    g.scale(sc, sc);
+    shadow(g, 16, 6);
+    g.fillStyle = cloth;
+    g.beginPath();
+    g.moveTo(-18, 0); g.lineTo(0, -20); g.lineTo(18, 0);
+    g.closePath();
+    g.fill();
+    g.strokeStyle = "rgba(30,20,10,0.6)";
+    g.lineWidth = 1.4;
+    g.stroke();
+    g.fillStyle = "rgba(252,248,238,0.9)";                      // stripe
+    g.beginPath();
+    g.moveTo(-6, 0); g.lineTo(0, -20); g.lineTo(6, 0);
+    g.closePath();
+    g.fill();
+    g.fillStyle = "#241a10";                                    // door
+    g.beginPath();
+    g.moveTo(-4, 0); g.lineTo(0, -9); g.lineTo(4, 0);
+    g.closePath();
+    g.fill();
+    g.restore();
+  };
+  tent(x - 26, y + 6, 1.05, "#8a4a3a");
+  tent(x + 24, y - 6, 0.85, "#3d5a78");
+  const fx = x + 4, fy = y + 16;                                // campfire
+  g.fillStyle = "#4a3a28";
+  for (let i = 0; i < 5; i++) {
+    g.save();
+    g.translate(fx, fy);
+    g.rotate((i / 5) * Math.PI);
+    g.fillRect(-7, -1.1, 14, 2.2);
+    g.restore();
+  }
+  const fl = g.createRadialGradient(fx, fy - 3, 0, fx, fy - 3, 9);
+  fl.addColorStop(0, "rgba(255,200,90,0.95)");
+  fl.addColorStop(1, "rgba(255,120,30,0)");
+  g.fillStyle = fl;
+  g.beginPath();
+  g.arc(fx, fy - 3, 9, 0, Math.PI * 2);
+  g.fill();
+  for (let i = 0; i < 3; i++) {                                 // log pile
+    g.fillStyle = i % 2 ? "#7a5630" : "#8a6438";
+    g.beginPath();
+    g.roundRect(x - 52 + i * 3, y + 18 - i * 4, 26, 5, 2.4);
+    g.fill();
+    g.strokeStyle = "rgba(40,24,8,0.5)";
+    g.lineWidth = 1;
+    g.stroke();
+  }
+  void rand;
+}
+
+// One ancient tree, far bigger than anything in the groves.
+function lmGreatTree(g, x, y, theme, seed, key = "oliveTree") {
+  g.fillStyle = mix(theme.grass[1], "#000000", 0.2);
+  g.beginPath();
+  g.ellipse(x, y + 6, 54, 26, 0, 0, Math.PI * 2);
+  g.fill();
+  g.save();
+  g.translate(x, y);
+  PROP_FNS[key](g, 2.7, seed % 3);
+  g.restore();
+}
+
+const LANDMARKS = {
+  troy:      [(g,x,y,t,s) => lmCamp(g,x,y,t,s),        (g,x,y,t,s) => lmStones(g,x,y,t,s)],
+  arcadia:   [(g,x,y,t,s) => lmPond(g,x,y,t,s),        (g,x,y,t,s) => lmGreatTree(g,x,y,t,s)],
+  labyrinth: [(g,x,y,t,s) => lmPond(g,x,y,t,s,true),   (g,x,y,t,s) => lmStones(g,x,y,t,s)],
+  hades:     [(g,x,y,t,s) => lmStones(g,x,y,t,s),      (g,x,y,t,s) => lmGreatTree(g,x,y,t,s,"deadTree")],
+  olympus:   [(g,x,y,t,s) => lmPond(g,x,y,t,s,false,true), (g,x,y,t,s) => lmStones(g,x,y,t,s,"obsidian")],
+};
+
+// Place the level's landmark in the biggest clear pocket. Returns its centre
+// so the groves can keep away, or null when the map is too dense for one.
+export function placeLandmark(g, routes, spots, theme, stageId, seed) {
+  const rand = rng(seed * 26501 + 11);
+  const pool = LANDMARKS[stageId] || LANDMARKS.troy;
+  const draw = pool[seed % pool.length];
+
+  const roadDist = (x, y) => {
+    let d = Infinity;
+    for (const r of routes) {
+      const on = nearestPointOnPath(r, x, y);
+      d = Math.min(d, dist(x, y, on.x, on.y));
+    }
+    return d;
+  };
+  // best of many random candidates: maximise clearance from everything
+  let best = null;
+  for (let a = 0; a < 240; a++) {
+    const x = 140 + rand() * (W - 280);
+    const y = 130 + rand() * (H - 250);
+    const clear = Math.min(
+      roadDist(x, y),
+      ...spots.map((sp) => dist(x, y, sp.x, sp.y)));
+    if (!best || clear > best.clear) best = { x, y, clear };
+  }
+  if (!best || best.clear < 60) return null;
+  if (best.clear >= 92) {
+    draw(g, best.x, best.y, theme, seed);
+    return best;
+  }
+  // Not enough room for the set-piece (dense fork and serpentine maps): a
+  // compact landmark instead — one great tree, or one monolith with kin.
+  const key = (FRAME_MIX[stageId] || FRAME_MIX.troy)[0];
+  if (seed % 2) lmGreatTree(g, best.x, best.y, theme, seed,
+    key === "obsidian" || key === "rock" ? "deadTree" : key === "snowPine" ? "snowPine" : "oliveTree");
+  else {
+    g.fillStyle = mix(theme.grass[1], "#000000", 0.2);
+    g.beginPath();
+    g.ellipse(best.x, best.y, 40, 24, 0, 0, Math.PI * 2);
+    g.fill();
+    for (const [ox, oy, sc] of [[-16, 6, 1.3], [14, -4, 1.7], [4, 10, 1.0]]) {
+      g.save();
+      g.translate(best.x + ox, best.y + oy);
+      PROP_FNS[key === "oliveTree" || key === "cypress" ? "rock" : key](g, sc, seed % 3);
+      g.restore();
+    }
+  }
+  return best;
 }
 
 // A build spot's ground: a bare dirt patch off the road, fringed like the road
@@ -549,11 +937,13 @@ export function scatterProps(g, routes, spots, stageId, seed) {
   // clumps above can't reach them and they end up bare. Small shrubs and
   // stones are short enough to sit there without hiding anything, which fills
   // the gap without cluttering the part of the board that matters.
+  // Sparse, and kept well off the verge: at 10 within 38px of the road they
+  // strung themselves along its edge like beads, which read as generated.
   const lowKey = mix.canopy.includes("shrub") ? "shrub" : "rock";
-  for (let n = 0, a = 0; n < 10 && a < 400; a++) {
+  for (let n = 0, a = 0; n < 6 && a < 400; a++) {
     const x = 34 + rand() * (W - 68);
     const y = 48 + rand() * (H - 84);
-    if (roadDist(x, y) < 38) continue;
+    if (roadDist(x, y) < 52) continue;
     if (spots.some((s) => dist(x, y, s.x, s.y) < 30)) continue;
     if (placed.some((p) => dist(x, y, p.x, p.y) < 26)) continue;
     placed.push({

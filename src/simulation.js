@@ -27,12 +27,17 @@ export function resetRun() {
   const diff = getDifficulty();
   const heroDef = HEROES[progress.hero] || HEROES[DEFAULT_HERO];
   const endP = PATH[PATH.length - 1];
+  // The path's true end can sit off-screen (top-exit maps end at y=-8), and
+  // the hero used to spawn beside it — standing in the sky, on the horizon
+  // line. Guard the spawn into the field.
+  const heroX = Math.min(CONFIG.width - 40, Math.max(40, endP.x - 70));
+  const heroY = Math.min(CONFIG.height - 40, Math.max(40, endP.y));
   Object.assign(state, {
     gold: Math.round(LEVEL.startGold * diff.goldMul * startGoldMul()),
     lives: Math.round(LEVEL.startLives * diff.livesMul) + startLivesBonus(),
     waveIndex: -1,
     enemies: [], towers: [], projectiles: [], effects: [],
-    hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
+    hero: makeHero({ x: heroX, y: heroY }, heroDef), // starts guarding the castle
     summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
     spawnQueue: [], clock: 0, wavePaid: [],
     nextWaveIn: 0,     // no clock before wave 1 — the player opens the battle

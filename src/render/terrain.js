@@ -10,7 +10,7 @@ import { CONFIG } from "../config.js";
 import { TOWER_TYPES } from "../data/towerTypes.js";
 import { state, PATH, PATHS, BUILD_SPOTS, LEVEL, THEME, spotOccupied } from "../state.js";
 import { ctx, groundShadow } from "./canvas.js";
-import { paveRoad, dirtPatch, scatterProps } from "./scenery.js";
+import { paveRoad, dirtPatch, scatterProps, frameGround, frameTrees, groves, placeLandmark } from "./scenery.js";
 import { drawBackdrop } from "./backdrop.js";
 
 const W = CONFIG.width, H = CONFIG.height;
@@ -75,9 +75,14 @@ function paintScenery() {
   blot(26, 90, 210, 0.07, 0.09);     // broad ground patches
   blot(190, 20, 60, 0.05, 0.05);     // finer dappling
 
+  const routes = PATHS.length ? PATHS.map((r) => r.pts) : [PATH];
+
+  // the forest-floor band the border wall stands on — under the road, so the
+  // road visibly breaks through it at every entry and exit
+  frameGround(g, THEME);
+
   // Secondary routes first, primary last, so where a fork's branches merge the
   // primary's paving sits on top and the joint reads as one road.
-  const routes = PATHS.length ? PATHS.map((r) => r.pts) : [PATH];
   const tight = LEVEL.archetype === "fork" || LEVEL.archetype === "serpentine";
   for (let i = routes.length - 1; i >= 0; i--)
     paveRoad(g, routes[i], THEME, tight ? 0.72 : 1);
@@ -87,6 +92,13 @@ function paintScenery() {
   // later stands on its patch; the signpost (drawn live in drawBuildSpots)
   // disappears, the patch stays.
   BUILD_SPOTS.forEach((sp, i) => dirtPatch(g, sp.x, sp.y, THEME, LEVEL.index * 100 + i));
+
+  // this level's one landmark, in its clearest pocket; then the masses the
+  // road bent around; then the wall around the whole field — drawn last so
+  // canopies overlap the road's fringe and the field's edge
+  const lm = placeLandmark(g, routes, BUILD_SPOTS, THEME, LEVEL.stageId, LEVEL.index + 1);
+  groves(g, routes, BUILD_SPOTS, THEME, LEVEL.stageId, LEVEL.index + 1, lm);
+  frameTrees(g, routes, BUILD_SPOTS, THEME, LEVEL.stageId, LEVEL.index + 1);
 
   // vignette, last, over everything
   const v = g.createRadialGradient(W / 2, H / 2, H * 0.32, W / 2, H / 2, H * 0.88);
