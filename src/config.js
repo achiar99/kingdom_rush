@@ -3,17 +3,41 @@ export const CONFIG = {
   width: 900,
   height: 560,
   waveClearBonus: 30,
-  // Between waves a countdown runs and the next wave launches on its own, so
-  // a battle has its own momentum instead of waiting on a button. Sending the
-  // wave early pays out the time you didn't use — the standard tower-defense
-  // trade of breathing room against gold.
+  // The clock to the next wave starts when a wave STARTS, not when it dies, so
+  // waves overlap: the countdown is visible for the whole battle and wave N+1
+  // can march in while N is still on the road. Sending it early pays out the
+  // time you didn't use — the standard trade of breathing room against gold.
+  //
+  // This is measured from the end of the current wave's own spawn, not from
+  // its start, so a long wave isn't buried by the next one.
+  //
+  // 105s was solved against the target curve, not chosen by feel. A creep
+  // walks the median path in ~75s, so the next wave lands while the previous
+  // one's tail is still being finished off — overlap, but not a pile-up. The
+  // failure mode being avoided is compounding: when the gap is shorter than a
+  // wave takes to resolve, the player falls permanently behind and the debt
+  // accumulates, which showed up as "the last wave causes 90% of all losses"
+  // on level after level.
+  //
+  // Do NOT read this as "build time between waves" and shrink it back toward
+  // its old value of 22 — that number was measured from a CLEARED board. Under
+  // overlap it stacked six or seven waves at once, 117 creeps on screen, and
+  // put every level under a 20% win rate.
   //
   // Wave 1 is the exception: no clock, no auto-start. The opening of a level
   // is the one moment the player needs unhurried — reading an unfamiliar map,
   // seeing which towers are unlocked, choosing the first spot — so the battle
   // doesn't begin until they say so. Every wave after that is on the timer.
-  nextWaveDelay: 22,      // seconds of build time after a wave is cleared
+  nextWaveDelay: 105,     // seconds from a wave finishing spawning to the next one
   earlyCallGold: 2,       // gold per whole second saved by calling the wave in
+  // ...but only for this many seconds of it. The countdown got about five
+  // times longer when waves started overlapping, and the payout rode straight
+  // along with it: calling one wave in early paid 756 gold with the Salvage
+  // track maxed, against 360 for the priciest tower in the game. Capping the
+  // paid window keeps the maximum where it was tuned, and has the useful side
+  // effect of removing any reward for calling a wave in absurdly early — past
+  // this point you take on the risk of a pile-up for nothing extra.
+  earlyCallMaxSeconds: 22,
   enemy: {
     meleeDamage: 14,      // damage an engaged creep deals to a soldier per hit
     attackInterval: 1.0,  // seconds between creep melee hits

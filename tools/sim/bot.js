@@ -197,6 +197,7 @@ export class Bot {
     this.nextDelay = rng.float(...profile.reaction);
     this.prepPatience = rng.float(...profile.prepPatience);
     this.prepElapsed = 0;
+    this.lastWave = -1;   // so prep time is measured from each wave's arrival
     this.sinceHeroOrder = 99;
     // Per-run flavour so two runs at the same skill still diverge: this
     // player's standing bias for or against each tower type.
@@ -207,7 +208,14 @@ export class Bot {
   tick(dt) {
     if (state.over) return;
     this.sinceHeroOrder += dt;
-    if (state.running) this.prepElapsed = 0; else this.prepElapsed += dt;
+
+    // Waves overlap, so `state.running` is true almost the whole battle and can
+    // no longer stand in for "there is a lull". Prep time is measured from the
+    // last wave that landed instead; without this the bot never accumulated any
+    // and simply stopped calling waves in early, which quietly removed the
+    // early-call bonus from every measured run.
+    if (state.waveIndex !== this.lastWave) { this.lastWave = state.waveIndex; this.prepElapsed = 0; }
+    this.prepElapsed += dt;
 
     this.sinceDecision += dt;
     if (this.sinceDecision < this.nextDelay) return;
@@ -215,20 +223,21 @@ export class Bot {
     this.nextDelay = this.rng.float(...this.p.reaction);
 
     this.spend();
-    if (state.running) {
+    if (state.enemies.length) {
       this.useAbilities();
       this.microHero();
-    } else {
-      this.considerStartingWave();
     }
+    // Always on the table now: there is no "between waves" left to wait for.
+    this.considerStartingWave();
   }
 
   // -------------------------------------------------------------- economy
   // What the player is building against: the wave in front of them, plus a
-  // discounted look at the two behind it.
+  // discounted look at the two behind it. Under overlap the next wave is never
+  // more than one countdown away, so the lookahead earns its keep.
   currentThreat() {
     const waves = wavesFor(LEVEL);
-    const i0 = Math.min(waves.length - 1, state.waveIndex + (state.running ? 0 : 1));
+    const i0 = Math.max(0, Math.min(waves.length - 1, state.waveIndex));
     const entries = [];
     for (let k = 0; k < 3; k++) {
       const w = waves[i0 + k];
@@ -351,6 +360,17 @@ export class Bot {
   // slower one dithers and lets the clock run out for nothing.
   considerStartingWave() {
     if (state.waveIndex + 1 >= wavesFor(LEVEL).length) return;
+
+    // Only send one in early when the board is close to clear.
+    //
+    // The rule below reads "call it in once there's nothing left to buy", which
+    // was safe when a wave could only be called during a lull. Under overlap it
+    // fires the instant the bot runs out of gold — so a broke bot called wave
+    // after wave with no pause at all and stacked eight of them at once. No
+    // player does that, and it made every measurement meaningless.
+    if (state.spawnQueue.length) return;                      // this wave is still arriving
+    if (state.enemies.filter((e) => !e.dead).length > 6) return;
+
     const threat = this.currentThreat();
     const army = armyDps(threat);
     const canStillBuy = !!(this.bestBuild(threat, army) || this.bestUpgrade(threat, army));

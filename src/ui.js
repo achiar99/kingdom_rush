@@ -338,23 +338,26 @@ export function updateButtons() {
   const btn = el("startBtn");
   if (state.over) { btn.disabled = true; return; }
   const waveCount = wavesFor(LEVEL).length;
-  const done = state.waveIndex + 1 >= waveCount;
-  btn.disabled = state.running || done;
+  const allSent = state.waveIndex + 1 >= waveCount;
+  btn.disabled = allSent;
 
-  if (done && !state.running) { btn.textContent = "All waves done"; return; }
-  if (state.running) { btn.textContent = "Wave " + (state.waveIndex + 1) + " incoming…"; return; }
+  if (allSent) {
+    btn.textContent = state.running ? "Final wave — hold the line" : "All waves done";
+    return;
+  }
 
   // Wave 1 has no clock and no bonus — it waits for the player, so the button
   // is phrased as the thing that starts the battle rather than as hurrying it.
   if (state.waveIndex === -1) { btn.textContent = "▶ Begin — start wave 1"; return; }
 
-  // Between waves: show the countdown and what sending it early would pay, so
-  // the trade (build time vs. gold) is visible at the moment it's being made.
+  // The countdown to the next wave runs during the current one, so this label
+  // is live for the whole battle rather than only in the gaps. It used to read
+  // "Wave 7 incoming…" with no clock at all while a wave was up, which left no
+  // way to see how long you had — that is what this display is for.
   const label = "Send wave " + (state.waveIndex + 2);
   const bonus = earlyCallBonus();
-  btn.textContent = bonus > 0
-    ? `${label} ⏱${Math.ceil(state.nextWaveIn)}s  +💰${bonus}`
-    : label;
+  btn.textContent = `${label} ⏱${Math.ceil(state.nextWaveIn)}s` +
+    (bonus > 0 ? `  +💰${bonus}` : "");
 }
 
 export function setTip(msg) { el("tip").textContent = msg; }

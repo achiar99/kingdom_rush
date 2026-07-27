@@ -8,7 +8,8 @@
          font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; padding: 20px; }
   h1 { font-size: 18px; margin: 0 0 4px; }
   p.note { color: #9aa4bd; font-size: 13px; margin: 0 0 16px; max-width: 760px; line-height: 1.5; }
-  canvas { display: block; border-radius: 10px; background: #2b3040; }
+  canvas { display: block; border-radius: 10px; background: #2b3040;
+           max-width: 100%; height: auto; }
 </style>
 </head>
 <body>
@@ -20,16 +21,24 @@
   recipe to see the change. Served from the dev server: <code>/tools/art-preview.html</code>
 </p>
 <!-- render/canvas.js binds to #game at import time, so it has to exist first -->
-<canvas id="game" width="1500" height="920"></canvas>
+<canvas id="game" width="1500" height="1120"></canvas>
+<p class="note" id="audit" style="margin-top:14px"></p>
 
 <script type="module">
-  import { ENEMY_KITS, ROLES } from "../src/data/enemyKits.js";
+  import { ENEMY_KITS, ROLES, MASTERS } from "../src/data/enemyKits.js";
   import { loadLevel } from "../src/state.js";
   import { ctx } from "../src/render/canvas.js";
   import { drawEnemy } from "../src/render/monsters.js";
 
   // monsters.js reads PATH/PATH_LEN for facing, so a level has to be loaded.
   loadLevel(0);
+
+  // ?focus=<kitId> blows one kit up across the whole sheet. The full grid is
+  // the right view for spotting two creatures that look alike; it is the wrong
+  // view for judging whether any single one is actually drawn well, because a
+  // twelve-pixel creep in a 1500px sheet is unreadable. Focus mode is for that.
+  //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters
+  const FOCUS = new URLSearchParams(location.search).get("focus");
 
   const COL_W = 140, ROW_H = 170, PAD_X = 52, PAD_Y = 74;
 
@@ -41,8 +50,40 @@
     ctx.fillText(text, x, y);
   }
 
+  // One kit, five across and two down, at four times the size.
+  function drawFocus() {
+    ctx.clearRect(0, 0, 1500, 1120);
+    const list = FOCUS === "masters"
+      ? Object.values(MASTERS)
+      : ROLES.map((r) => ENEMY_KITS[FOCUS].creatures[r]);
+    const COLS = 5, CW = 1500 / COLS, CH = 520;
+    // Masters are already radius 34-38 with their own 1.35-1.5 art scale, so
+    // the creep multiplier would run them off the canvas.
+    const ZOOM = FOCUS === "masters" ? 1.6 : 4;
+    list.forEach((creature, i) => {
+      const cx = (i % COLS) * CW + CW / 2;
+      const cy = Math.floor(i / COLS) * CH + 210;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.scale(ZOOM, ZOOM);
+      ctx.translate(-cx, -cy);
+      drawEnemy({
+        x: cx, y: cy, dist: 40, radius: creature.radius,
+        colors: creature.colors, def: creature, hp: 0.72, maxHp: 1,
+        flying: !!creature.flying, boss: !!creature.boss,
+        engaged: false, dead: false, hideHpBar: true,
+      });
+      ctx.restore();
+      label(creature.name, cx, cy + 150, "#e8ecf4", 15, 700);
+      label(Object.entries(creature.art)
+        .filter(([k, v]) => v && v !== "none" && k !== "scale")
+        .map(([k, v]) => v).join(" · "), cx, cy + 170, "#ffcf52", 12, 400);
+    });
+  }
+
   function draw() {
-    ctx.clearRect(0, 0, 1500, 920);
+    if (FOCUS) return drawFocus();
+    ctx.clearRect(0, 0, 1500, 1120);
 
     // column headers — the six roles
     ROLES.forEach((role, c) => label(role.toUpperCase(), PAD_X + c * COL_W + COL_W / 2, 26, "#ffcf52", 10, 700));
@@ -79,7 +120,53 @@
         if (tags.length) label(tags.join(" · "), cx, cy + 89, "#ffcf52", 9, 400);
       });
     });
+
+    // Sixth row: the five stage masters, which never appear in a kit's role
+    // grid but are drawn by exactly the same recipe system.
+    const my = PAD_Y + 5 * ROW_H + 62;
+    ctx.save();
+    ctx.translate(22, my);
+    ctx.rotate(-Math.PI / 2);
+    label("Stage Masters", 0, 0, "#ffcf52", 12, 700);
+    ctx.restore();
+    Object.values(MASTERS).forEach((m, c) => {
+      const cx = PAD_X + c * COL_W * 2 + COL_W;
+      drawEnemy({
+        x: cx, y: my, dist: 40, radius: m.radius,
+        colors: m.colors, def: m, hp: 0.72, maxHp: 1,
+        flying: false, boss: true, engaged: false, dead: false,
+      });
+      label(m.name, cx, my + 74, "#ffcf52", 10.5, 700);
+      label(m.absoluteHp + "hp", cx, my + 89, "#9aa4bd", 9.5, 400);
+    });
   }
+
+  // Audit: the whole point of the parts system is that no two creatures end up
+  // with the same recipe. That is easy to break by adding a kit and reaching
+  // for the nearest frame, and impossible to eyeball across 55 figures — so
+  // check it here rather than trusting the sheet to look varied.
+  (function audit() {
+    const all = [];
+    for (const kit of Object.values(ENEMY_KITS))
+      for (const role of ROLES) all.push([kit.id, kit.creatures[role]]);
+    for (const [id, m] of Object.entries(MASTERS)) all.push([id + "*", m]);
+
+    const seen = new Map();
+    for (const [kid, c] of all) {
+      const a = c.art;
+      const key = [a.frame, a.skin || "-", a.crest || "-", a.carry || "-", a.aura || "-", a.eye || "-"].join("/");
+      if (!seen.has(key)) seen.set(key, []);
+      seen.get(key).push(kid + ":" + c.name);
+    }
+    const dupes = [...seen].filter(([, v]) => v.length > 1);
+    const el = document.getElementById("audit");
+    if (!dupes.length) {
+      el.innerHTML = `<b style="color:#5ad1a5">✓ ${all.length} creatures, ${seen.size} distinct recipes</b> — no two share a silhouette.`;
+    } else {
+      el.innerHTML = `<b style="color:#ff6b6b">✗ ${dupes.length} collision(s)</b><br>` +
+        dupes.map(([k, v]) => `<code>${k}</code> — ${v.join(", ")}`).join("<br>");
+    }
+  })();
 
   // One static frame is enough to review silhouettes, but the flap/flicker
   // animations only read in motion, so keep it ticking.

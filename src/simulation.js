@@ -34,7 +34,7 @@ export function resetRun() {
     enemies: [], towers: [], projectiles: [], effects: [],
     hero: makeHero({ x: endP.x - 70, y: endP.y }, heroDef), // starts guarding the castle
     summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
-    spawnQueue: [], spawnTimer: 0,
+    spawnQueue: [], clock: 0, wavePaid: [],
     nextWaveIn: 0,     // no clock before wave 1 — the player opens the battle
     running: false, over: false, paused: false, speed: 1,
     hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
@@ -47,13 +47,16 @@ export function resetRun() {
 // The only difference between the two is how much time was left on the clock,
 // which is exactly what the early-call bonus pays for — so both go through
 // here and the bonus falls out on its own.
+//
+// Note there is no `state.running` guard: the clock to wave N+1 starts when
+// wave N starts, not when wave N dies, so waves are expected to overlap and
+// this can legitimately be called with creeps still on the road.
 export function startNextWave() {
-  if (state.over || state.running) return;
+  if (state.over) return;
   const waves = wavesFor(LEVEL);
   if (state.waveIndex + 1 >= waves.length) return;
 
   const bonus = earlyCallBonus();
-  state.nextWaveIn = 0;
   if (bonus > 0) {
     state.gold += bonus;
     simHooks.setTip("Wave called in early — +" + bonus + " gold.");
@@ -62,14 +65,34 @@ export function startNextWave() {
   state.waveIndex++;
   const wave = waves[state.waveIndex];
   const hpMul = wave.hpMul * LEVEL.hpScale * getDifficulty().hpMul;
-  // flatten the wave's groups into an ordered queue of individual spawns,
-  // each carrying its own gap (delay until the NEXT spawn) and wave scaling.
-  state.spawnQueue = [];
+  // Flatten the wave's groups into individual spawns scheduled against the
+  // battle clock. Absolute times rather than a single running gap timer,
+  // because two or three waves can now be spawning at once and one shared
+  // countdown cannot represent that.
+  let at = state.clock;
   for (const g of wave.groups)
-    for (let i = 0; i < g.count; i++)
-      state.spawnQueue.push({ type: g.type, gap: g.gap, hpMul, speedMul: wave.speedMul });
-  state.spawnTimer = 0;
+    for (let i = 0; i < g.count; i++) {
+      state.spawnQueue.push({ type: g.type, at, hpMul, speedMul: wave.speedMul,
+                              wave: state.waveIndex });
+      at += g.gap;
+    }
+  state.spawnQueue.sort((a, b) => a.at - b.at);
   state.running = true;
+
+  // Start the clock for the wave AFTER this one right now. This is the whole
+  // point of the overlap model: the player can always see how long they have.
+  //
+  // The interval is derived from the wave rather than fixed, because the old
+  // constant measured build time AFTER a wave was already dead. Reused as-is
+  // it stacked six or seven waves on top of each other — a wave spawns in
+  // about nine seconds but its creeps need seventy-five or more to walk the
+  // road, so a flat clock can never keep up. Counting from the end of this
+  // wave's own spawn keeps a long wave from being buried by the next one.
+  const spawnSec = at - state.clock;
+  const upcoming = waves[state.waveIndex + 1];
+  state.nextWaveIn = upcoming
+    ? spawnSec + CONFIG.nextWaveDelay * (upcoming.leadIn ?? 1) : 0;
+
   // The one wave in each stage that gets its own billing.
   if (wave.master) simHooks.setTip("⚔ " + MASTERS[LEVEL.kit].name + " takes the field.");
   simHooks.closeMenus();
@@ -78,26 +101,31 @@ export function startNextWave() {
 }
 
 // What calling the next wave in right now would pay. Zero once the countdown
-// has run out, so an auto-started wave never awards anything.
+// has run out, so an auto-started wave never awards anything. Deliberately
+// available mid-combat — under overlap there is no "between waves" any more.
 export function earlyCallBonus() {
-  if (state.running || state.over) return 0;
-  return Math.max(0, Math.floor(state.nextWaveIn) * (CONFIG.earlyCallGold + earlyCallGoldBonus()));
+  if (state.over) return 0;
+  const paid = Math.min(state.nextWaveIn, CONFIG.earlyCallMaxSeconds);
+  return Math.max(0, Math.floor(paid) * (CONFIG.earlyCallGold + earlyCallGoldBonus()));
 }
 
-export function waveCleared() {
-  state.running = false;
-  if (state.waveIndex + 1 >= wavesFor(LEVEL).length) {
-    endGame(true);
-  } else {
+// Pay a wave's clear bonus the moment its last creep dies.
+//
+// "The board is empty" used to mark a wave boundary; with waves overlapping it
+// no longer does, and on a busy level the board may never empty at all. So
+// each wave is tracked on its own — a wave is done when it has nothing left
+// queued to spawn and nothing left alive, whatever else is happening.
+function settleFinishedWaves() {
+  for (let w = 0; w <= state.waveIndex; w++) {
+    if (state.wavePaid[w]) continue;
+    if (state.spawnQueue.some((s) => s.wave === w)) continue;
+    if (state.enemies.some((e) => e.wave === w && !e.dead)) continue;
+    state.wavePaid[w] = true;
     state.gold += CONFIG.waveClearBonus;
-    state.nextWaveIn = CONFIG.nextWaveDelay;
-    const fresh = newUnlocksAt(LEVEL.index, state.waveIndex + 2);
-    simHooks.setTip("Wave cleared! +" + CONFIG.waveClearBonus + " gold." +
-      (fresh.length ? " 🔓 Unlocked: " + fresh.join(", ") + "!" : "") +
-      " Build up — the next wave comes on its own, or send it early for gold.");
+    const fresh = newUnlocksAt(LEVEL.index, w + 2);
+    simHooks.setTip("Wave " + (w + 1) + " cleared! +" + CONFIG.waveClearBonus + " gold." +
+      (fresh.length ? " 🔓 Unlocked: " + fresh.join(", ") + "!" : ""));
   }
-  simHooks.updateHud();
-  simHooks.updateButtons();
 }
 
 // Star rating is based on % of that playthrough's starting lives left at the
@@ -125,11 +153,13 @@ export function endGame(won) {
 export function update(dt) {
   if (state.over) return;
 
-  // Between waves the clock runs down on its own; at zero the next wave
-  // launches with no bonus paid. startNextWave() is the single entry point,
-  // so a wave that arrives this way behaves identically to one the player
-  // called in — it just doesn't pay.
-  if (!state.running && state.nextWaveIn > 0) {
+  state.clock += dt;
+
+  // The clock runs whether or not a wave is on the road; at zero the next wave
+  // launches with no bonus paid. startNextWave() is the single entry point, so
+  // a wave that arrives this way behaves identically to one the player called
+  // in — it just doesn't pay, and it may well arrive on top of the last one.
+  if (state.nextWaveIn > 0) {
     state.nextWaveIn -= dt;
     if (state.nextWaveIn <= 0) {
       state.nextWaveIn = 0;
@@ -137,15 +167,9 @@ export function update(dt) {
     }
   }
 
-  // spawn creeps for the running wave
-  if (state.running && state.spawnQueue.length) {
-    state.spawnTimer -= dt;
-    if (state.spawnTimer <= 0) {
-      const entry = state.spawnQueue.shift();
-      state.enemies.push(makeEnemy(entry));
-      state.spawnTimer = entry.gap;
-    }
-  }
+  // Spawn everything now due, which may be creeps from more than one wave.
+  while (state.spawnQueue.length && state.spawnQueue[0].at <= state.clock)
+    state.enemies.push(makeEnemy(state.spawnQueue.shift()));
 
   // ability cooldowns tick down regardless of anything else happening
   if (state.abilityCooldowns.soldiers > 0) state.abilityCooldowns.soldiers -= dt;
@@ -264,7 +288,7 @@ export function update(dt) {
     for (let i = 0; i < e.splits; i++) {
       const back = 14 + i * 12;
       spawned.push(makeEnemy(
-        { type: "swarm", gap: 0, hpMul: e.hpMul * 0.55, speedMul: e.speedMul },
+        { type: "swarm", wave: e.wave, hpMul: e.hpMul * 0.55, speedMul: e.speedMul },
         Math.max(0, e.dist - back)));
     }
   }
@@ -275,9 +299,15 @@ export function update(dt) {
   state.projectiles = state.projectiles.filter((p) => !p.dead);
   state.effects = state.effects.filter((fx) => fx.life > 0);
 
-  // wave finished when queue drained and no enemies remain
-  if (state.running && state.spawnQueue.length === 0 && state.enemies.length === 0)
-    waveCleared();
+  settleFinishedWaves();
+
+  // `running` now means "combat is happening", not "a wave is in progress" —
+  // under overlap those stopped being the same thing.
+  state.running = state.spawnQueue.length > 0 || state.enemies.length > 0;
+
+  // The level is won when every wave has been sent and the board is clear.
+  if (!state.running && state.waveIndex + 1 >= wavesFor(LEVEL).length && state.waveIndex >= 0)
+    endGame(true);
 
   simHooks.updateHud();
 }

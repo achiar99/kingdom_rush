@@ -89,11 +89,25 @@ export const STAGES = [
     themes: ["ilion", "troad", "aegean"],
     // The stage's difficulty, as [first level, last level]; the eight levels
     // between interpolate. These come from tools/sim/fit-stages.js and are
-    // deliberately NOT monotonic across the campaign — a later stage can want
-    // a lower hpScale because it fields more waves and every role from its
-    // first level. Forcing them to rise "because Titans should be tougher
-    // than a Minotaur" put the last ten levels at a 0% win rate.
-    hpScale: [1.0, 3.9],
+    // deliberately NOT monotonic — a later level can want a LOWER hpScale
+    // because it fields more waves, and since waves now overlap, wave count
+    // costs far more than it used to. Forcing them to rise "because Titans
+    // should be tougher than a Minotaur" put the last ten levels at 0%.
+    //
+    // Two caveats when re-reading the fitter's output. First, every stage's
+    // TENTH level is its master level, and a master's absoluteHp deliberately
+    // bypasses hpScale — so the fitter has no lever on the thing actually
+    // deciding that fight and will chase the endpoint down absurdly far. It
+    // asked for 0.5 on Stage II and still missed the target by 30 points. Tune
+    // the master in data/enemyKits.js instead.
+    //
+    // Second: startGold is derived
+    // from hpScale, so raising hpScale hands out proportionally more gold. On
+    // the early levels the two cancel almost exactly and the fitter will
+    // happily report an enormous first-level value that "still wins 100%".
+    // That is not a difficulty reading — it means hpScale barely controls
+    // difficulty there at all. Take those with judgement.
+    hpScale: [1.0, 1.6],
     icon: "🛡️",
   },
   {
@@ -101,7 +115,7 @@ export const STAGES = [
     blurb: "Past the last olive terrace, older things are still awake.",
     kit: "arcadia",
     themes: ["olive", "arkadia", "alpheios"],
-    hpScale: [3.2, 7.2],
+    hpScale: [2.9, 1.6],
     icon: "🌿",
   },
   {
@@ -109,7 +123,7 @@ export const STAGES = [
     blurb: "Every corridor doubles back. Something is counting your turns.",
     kit: "labyrinth",
     themes: ["knossos", "labyrinth", "bronze"],
-    hpScale: [7.5, 6.0],
+    hpScale: [5.5, 5.2],
     icon: "🐂",
   },
   {
@@ -117,7 +131,7 @@ export const STAGES = [
     blurb: "The dead are many, and they are no longer resting.",
     kit: "hades",
     themes: ["asphodel", "erebos", "styx"],
-    hpScale: [6.4, 8.8],
+    hpScale: [6.0, 8.1],
     icon: "💀",
   },
   {
@@ -125,7 +139,7 @@ export const STAGES = [
     blurb: "What the gods buried is climbing back up the mountain.",
     kit: "olympus",
     themes: ["othrys", "olympus", "aither"],
-    hpScale: [3.9, 6.3],
+    hpScale: [3.6, 5.8],
     icon: "⚡",
   },
 ];

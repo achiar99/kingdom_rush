@@ -67,6 +67,14 @@ function availableRoles(stageIndex, levelInStage) {
   return ROLES.filter((r) => t >= intro[r]);
 }
 
+// How much of the finale's normal wave survives alongside the master.
+//
+// Solved against the harness, and it is the dominant knob for the last level
+// of every stage — far more so than the master's own HP. At 0.7 the Stage V
+// finale sat at 21% for ANY master HP from 2500 to 11000; at 0.35 it hits its
+// 40% target. See the note at the thinning site.
+export const MASTER_ESCORT = 0.35;
+
 // One level's worth of waves.
 //
 // The shape every level follows: a soft opening the starting purse can
@@ -170,11 +178,15 @@ export function generateWaves(opts) {
     const finale = best.waves[best.waves.length - 1];
     finale.master = true;                       // so the UI can announce it
     finale.groups.unshift({ type: "master", count: 1, gap: 4.5 });
-    // Thin the escort a little: the master IS the wave, and stacking it on top
-    // of an already-peak finale is how you get an unwinnable last level.
+    // Thin the escort: the master IS the wave, and stacking it on top of an
+    // already-peak finale is how you get an unwinnable last level.
+    //
+    // This factor, not the master's HP, is what decides the late finales. With
+    // the master dropped to 2500 — weaker than an ordinary champion — Stage IV
+    // still measured 46% and Stage V 21%, so the escort alone was losing them.
     for (const g of finale.groups) {
       if (g.type === "master") continue;
-      g.count = Math.max(1, Math.round(g.count * 0.7));
+      g.count = Math.max(1, Math.round(g.count * MASTER_ESCORT));
     }
     void stageIndex; void waveCount;
   }

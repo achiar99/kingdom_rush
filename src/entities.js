@@ -31,7 +31,9 @@ export function makeEnemy(entry, dist = 0) {
   const hp = d.absoluteHp ?? d.hp * entry.hpMul;
   const p = dist > 0 ? pointAtDistance(PATH, pathLength(PATH), dist) : PATH[0];
   return {
-    type: entry.type, def: d, dist,
+    // which wave sent it — waves overlap, so "the board is empty" no longer
+    // identifies a wave and each creep has to carry its own tag
+    type: entry.type, wave: entry.wave ?? 0, def: d, dist,
     speed: d.speed * entry.speedMul,
     maxHp: hp, hp, reward: d.reward, radius: d.radius,
     armor: d.armor, flying: d.flying, boss: !!d.boss, colors: d.colors,

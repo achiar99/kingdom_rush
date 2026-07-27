@@ -30,7 +30,9 @@ export const state = {
   gold: 0, lives: 0, waveIndex: -1,
   enemies: [], towers: [], projectiles: [], effects: [], hero: null,
   summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
-  spawnQueue: [], spawnTimer: 0,
+  spawnQueue: [],  // pending spawns, each stamped with the battle-clock time it is due
+  clock: 0,        // seconds of battle elapsed; spawns are scheduled against it
+  wavePaid: [],    // wavePaid[i] once wave i's clear bonus has been handed over
   nextWaveIn: 0,   // seconds until the next wave launches itself
   running: false, over: false, paused: false, speed: 1,
   hoverSpot: null, menuSpot: null, selected: null, repositioning: null,
