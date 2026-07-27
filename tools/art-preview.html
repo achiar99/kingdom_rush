@@ -29,6 +29,8 @@
   import { loadLevel } from "../src/state.js";
   import { ctx } from "../src/render/canvas.js";
   import { drawEnemy } from "../src/render/monsters.js";
+  import { drawTower } from "../src/render/towers.js";
+  import { TOWER_TYPES, TYPE_LIST, specsFor } from "../src/data/towerTypes.js";
 
   // monsters.js reads PATH/PATH_LEN for facing, so a level has to be loaded.
   loadLevel(0);
@@ -37,8 +39,12 @@
   // the right view for spotting two creatures that look alike; it is the wrong
   // view for judging whether any single one is actually drawn well, because a
   // twelve-pixel creep in a 1500px sheet is unreadable. Focus mode is for that.
-  //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters
-  const FOCUS = new URLSearchParams(location.search).get("focus");
+  //   ?focus=troy | arcadia | labyrinth | hades | olympus | masters | towers
+  const PARAMS = new URLSearchParams(location.search);
+  const FOCUS = PARAMS.get("focus");
+  // ?zoom=N and ?only=<type> for close inspection of a single tower
+  const ZOOM_OVERRIDE = Number(PARAMS.get("zoom")) || 0;
+  const ONLY = PARAMS.get("only");
 
   const COL_W = 140, ROW_H = 170, PAD_X = 52, PAD_Y = 74;
 
@@ -48,6 +54,34 @@
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(text, x, y);
+  }
+
+  // Every tower, every specialisation, at three times the size. Towers are
+  // drawn at ~50px in play and the whole point of a polish pass is detail you
+  // can only judge up close.
+  function drawTowerSheet() {
+    ctx.clearRect(0, 0, 1500, 1120);
+    const rows = TYPE_LIST.filter((k) => !ONLY || k === ONLY).map((key) => {
+      const specs = specsFor(key);
+      return [
+        { key, spec: null, label: TOWER_TYPES[key].name + " (lv3)" },
+        ...specs.map((sp) => ({ key, spec: sp.key, label: sp.name })),
+      ];
+    });
+    const CW = 1500 / 3, RH = 270, Z = ZOOM_OVERRIDE || 3;
+    rows.forEach((variants, r) => {
+      variants.forEach((v, c) => {
+        const cx = c * CW + CW / 2, cy = r * RH + (ONLY ? 560 : 215);
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.scale(Z, Z);
+        ctx.translate(-cx, -cy);
+        drawTower({ x: cx, y: cy, type: v.key, level: 3, spec: v.spec,
+                    fireRate: 1, cooldown: 0, range: 0, hitsAir: true });
+        ctx.restore();
+        label(v.label, cx, cy + 74, "#e8ecf4", 14, 700);
+      });
+    });
   }
 
   // One kit, five across and two down, at four times the size.
@@ -82,6 +116,7 @@
   }
 
   function draw() {
+    if (FOCUS === "towers") return drawTowerSheet();
     if (FOCUS) return drawFocus();
     ctx.clearRect(0, 0, 1500, 1120);
 

@@ -58,10 +58,13 @@ function paintOne(g, w, h, kind, key, extra) {
   const place = (scale, ty) => { g.translate(w / 2, ty); g.scale(scale, scale); };
 
   if (kind === "tower") {
-    // Towers draw upward from their footing, and the tallest of them (Amazon
-    // Longbows) is about 80px, so the scale is derived from the tile height
-    // rather than fixed — otherwise the tall ones lose their roofs.
-    place(Math.min(0.62, (h - 8) / 80), h - 6);
+    // Towers draw upward from their footing, and they are nowhere near the
+    // same height — an Amazon Longbows tower with its pennant is about three
+    // times a Ballista. Scaling them all by the tallest left the artillery
+    // tiles looking half empty, so each type is normalised to its own drawn
+    // height. Keep these roughly in step with render/towers.js.
+    const TOWER_H = { archer: 96, artillery: 42, barracks: 62, magic: 74 };
+    place(Math.min(0.95, (h - 8) / (TOWER_H[key] || 80)), h - 6);
     drawTower({ x: 0, y: 0, type: key, level: 3, spec: extra || null,
                 fireRate: 1, cooldown: 0, range: 0, hitsAir: true });
     return;
