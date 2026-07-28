@@ -79,6 +79,7 @@ opinions; edit them.
 |---------------|-------------------------------------------------------|
 | `cli.js`      | entry point, worker pool, report assembly             |
 | `tune.js`     | parameter sweeps and bisection (`--solve`)            |
+| `calibrate.js`| solve every level's per-map factor for `calibration.js` |
 | `harness.js`  | one trial: reset, step the real `update()`, record it |
 | `bot.js`      | the synthetic player and its skill profiles           |
 | `stats.js`    | percentiles, Wilson intervals, per-cell summaries     |

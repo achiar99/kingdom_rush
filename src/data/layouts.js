@@ -29,8 +29,10 @@
 //   * a fork's merged tail is ONE shared array spliced into every route, so
 //     the shared stretch is pixel-identical (jitter is applied per-point, and
 //     shared points are shared references)
-//   * `spotAdjust` trims a compact map's build-spot count: exposure is
-//     per-spot, so a small map keeps its band with fewer, better spots
+//   * spot COUNTS are never authored here — they're the campaign ramp in
+//     levels.js, and exposure is measured over each map's best nine spots,
+//     so extra buildable ground neither games the metric nor gets trimmed
+//     to satisfy it
 //
 // Coordinates are [x, y] pairs; mapgen.js turns them into smoothed polylines.
 
@@ -80,20 +82,20 @@ const T5 = { motif: "a lightning Z", archetype: "wander", routes: [[
 // rejoins before the gate. The island between the arms is prime ground.
 const T6_HEAD = [[-30, 455], [130, 480], [270, 445], [288, 342], [330, 285]];
 const T6_TAIL = [[720, 290], [790, 245], [828, 325], [788, 412], [858, 478], [930, 505]];
-const T6 = { motif: "a pincer around the gate", archetype: "fork", spotAdjust: -1, routes: [
+const T6 = { motif: "a pincer around the gate", archetype: "fork", routes: [
   [...T6_HEAD, [365, 200], [455, 170], [548, 200], [628, 262], [660, 290], ...T6_TAIL],
   [...T6_HEAD, [418, 375], [502, 392], [588, 358], [645, 308], [660, 290], ...T6_TAIL],
 ] };
 
 // I·7 Ida's Foothills — a G-hook: around the field and deep into its heart.
-const T7 = { motif: "a hook into the foothills", archetype: "spiral", spotAdjust: -2, routes: [[
+const T7 = { motif: "a hook into the foothills", archetype: "spiral", routes: [[
   [930, 120], [780, 90], [600, 75], [415, 105], [240, 150], [140, 255],
   [150, 370], [260, 455], [430, 490], [610, 465], [730, 395], [750, 290],
   [650, 225], [505, 208], [390, 262], [340, 330], [420, 392],
 ]] };
 
 // I·8 The Burning Ships — a switchback climb from the shore to the heights.
-const T8 = { motif: "a switchback climb", archetype: "wander", spotAdjust: -2, routes: [[
+const T8 = { motif: "a switchback climb", archetype: "wander", routes: [[
   [-30, 480], [120, 462], [290, 435], [360, 348], [310, 262], [400, 195],
   [555, 170], [690, 145], [785, 205], [725, 280], [612, 318], [675, 430],
   [810, 465], [930, 485],
@@ -123,7 +125,7 @@ const T10 = { motif: "the classic serpentine", archetype: "serpentine", routes: 
 // The Wilds of Arcadia — river country; rounder, wetter shapes.
 
 // II·1 Olive Terraces — an oxbow: along the river flats and back up top.
-const A1 = { motif: "an oxbow through the terraces", archetype: "wander", spotAdjust: -1, routes: [[
+const A1 = { motif: "an oxbow through the terraces", archetype: "wander", routes: [[
   [930, 470], [780, 495], [590, 460], [400, 490], [220, 450], [110, 370],
   [135, 290], [265, 318], [420, 350], [575, 318], [680, 225], [700, 110],
   [590, 70], [470, 110], [430, -8],
@@ -131,7 +133,7 @@ const A1 = { motif: "an oxbow through the terraces", archetype: "wander", spotAd
 
 // II·2 Ladon River — the river's own L: down the west bank in switchbacks,
 // east along the shallows, and a hooked climb out.
-const A2 = { motif: "the river's L, hooked", archetype: "wander", spotAdjust: -2, routes: [[
+const A2 = { motif: "the river's L, hooked", archetype: "wander", routes: [[
   [130, -8], [140, 70], [225, 138], [118, 215], [225, 288], [118, 362],
   [190, 438], [330, 478], [440, 395], [560, 458], [690, 472], [795, 438],
   [812, 368], [738, 312], [830, 242], [742, 182], [820, 125], [930, 110],
@@ -174,14 +176,14 @@ const A6 = { motif: "a split around the tarn", archetype: "fork", routes: [
 
 // II·7 The Centaur Fords — the mirrored hook: along the south shore, up the
 // far bank, and inward to the ford.
-const A7 = { motif: "a hook to the ford", archetype: "spiral", spotAdjust: -1, routes: [[
+const A7 = { motif: "a hook to the ford", archetype: "spiral", routes: [[
   [-30, 460], [130, 490], [320, 460], [510, 490], [680, 450], [780, 360],
   [800, 245], [720, 150], [570, 95], [400, 80], [240, 120], [180, 220],
   [240, 320], [380, 360], [500, 330], [540, 240], [460, 185], [370, 218],
 ]] };
 
 // II·8 Cave of the Lion — a hard zigzag down the gorge to the cave mouth.
-const A8 = { motif: "a zigzag down the gorge", archetype: "wander", spotAdjust: -1, routes: [[
+const A8 = { motif: "a zigzag down the gorge", archetype: "wander", routes: [[
   [470, -8], [460, 70], [340, 105], [215, 175], [255, 275], [385, 315],
   [530, 280], [655, 215], [730, 305], [665, 415], [520, 455], [370, 440],
   [245, 485], [290, 590],
@@ -196,7 +198,7 @@ const A9_SHARED = [
 // Three routes dilute the per-route exposure past what geometry recovers,
 // and that is the point — the two tridents (here and Gates of Olympus) sit
 // at the fork band's floor as each arc's deliberate hardest map.
-const A9 = { motif: "three trails become one", archetype: "fork", spotAdjust: -4, routes: [
+const A9 = { motif: "three trails become one", archetype: "fork", routes: [
   [[-30, 80], [130, 105], [290, 70], [380, 120], [420, 175], ...A9_AB, ...A9_SHARED],
   [[-30, 250], [140, 270], [300, 235], [380, 205], [420, 175], ...A9_AB, ...A9_SHARED],
   [[-30, 430], [150, 455], [330, 420], [450, 330], [520, 260], ...A9_SHARED],
@@ -224,7 +226,7 @@ const L1 = { motif: "a horseshoe with a quay lip", archetype: "wander", routes: 
 ]] };
 
 // III·2 Palace Steps — a staircase descending west, step by frozen step.
-const L2 = { motif: "a staircase down the palace", archetype: "wander", spotAdjust: -1, routes: [[
+const L2 = { motif: "a staircase down the palace", archetype: "wander", routes: [[
   [930, 70], [780, 62], [620, 88], [720, 195], [600, 235], [490, 185],
   [420, 258], [500, 322], [400, 390], [268, 352], [185, 428], [255, 492],
   [230, 590],
@@ -236,20 +238,20 @@ const L3_SHARED = [
   [400, 270], [295, 330], [255, 430], [365, 480], [520, 450], [645, 485],
   [765, 440], [815, 340], [750, 250], [825, 165], [930, 140],
 ];
-const L3 = { motif: "two doors, one long hall", archetype: "fork", spotAdjust: -2, routes: [
+const L3 = { motif: "two doors, one long hall", archetype: "fork", routes: [
   [[280, -8], [275, 70], [330, 140], [400, 180], [420, 195], ...L3_SHARED],
   [[560, -8], [565, 70], [505, 140], [440, 180], [420, 195], ...L3_SHARED],
 ] };
 
 // III·4 First Turning — a RECTANGULAR spiral; the labyrinth proper begins.
-const L4 = { motif: "a squared spiral", archetype: "spiral", spotAdjust: -3, routes: [[
+const L4 = { motif: "a squared spiral", archetype: "spiral", routes: [[
   [380, -8], [370, 75], [220, 90], [110, 150], [95, 290], [110, 420],
   [230, 480], [420, 455], [610, 485], [760, 430], [790, 300], [770, 170],
   [640, 115], [500, 150], [460, 260], [500, 350], [600, 372], [660, 300],
 ]] };
 
 // III·5 Hall of Double Axes — three axe-strokes in a row, blade after blade.
-const L5 = { motif: "axes in a row", archetype: "wander", spotAdjust: -1, routes: [[
+const L5 = { motif: "axes in a row", archetype: "wander", routes: [[
   [-30, 200], [90, 155], [168, 245], [193, 370], [245, 455], [318, 368],
   [330, 245], [400, 162], [468, 245], [488, 370], [540, 455], [613, 368],
   [625, 245], [695, 162], [765, 245], [788, 368], [838, 440], [930, 455],
@@ -260,7 +262,7 @@ const L5 = { motif: "axes in a row", archetype: "wander", spotAdjust: -1, routes
 // length, utterly different shape.
 const L6_HEAD = [[-30, 80], [140, 68], [300, 112], [368, 188], [390, 240]];
 const L6_TAIL = [[790, 330], [815, 415], [735, 480], [595, 500], [450, 472], [385, 525], [430, 590]];
-const L6 = { motif: "catwalks or the drowned floor", archetype: "fork", spotAdjust: -3, routes: [
+const L6 = { motif: "catwalks or the drowned floor", archetype: "fork", routes: [
   [...L6_HEAD, [465, 195], [555, 245], [645, 205], [715, 265], [730, 290], ...L6_TAIL],
   [...L6_HEAD, [420, 325], [535, 368], [645, 372], [712, 318], [730, 290], ...L6_TAIL],
 ] };
@@ -276,7 +278,7 @@ const L7 = { motif: "the wound thread", archetype: "spiral", routes: [[
 
 // III·8 The Deep Coil — a vertical S with a hooked crown: up from the depths,
 // around the gallery, out the top.
-const L8 = { motif: "an S out of the depths", archetype: "wander", spotAdjust: -2, routes: [[
+const L8 = { motif: "an S out of the depths", archetype: "wander", routes: [[
   [430, 590], [445, 505], [335, 460], [245, 370], [300, 255], [430, 225],
   [560, 275], [655, 370], [762, 412], [828, 335], [798, 225], [685, 175],
   [560, 115], [430, 82], [300, 112], [250, -8],
@@ -287,7 +289,7 @@ const L8 = { motif: "an S out of the depths", archetype: "wander", spotAdjust: -
 const L9_SHARED = [
   [185, 295], [330, 270], [500, 300], [670, 270], [800, 300], [930, 290],
 ];
-const L9 = { motif: "a pincer to the west wall", archetype: "fork", spotAdjust: -2, routes: [
+const L9 = { motif: "a pincer to the west wall", archetype: "fork", routes: [
   [[930, 105], [780, 128], [600, 95], [420, 122], [250, 100], [120, 148], [95, 215], [95, 280], ...L9_SHARED],
   [[930, 455], [780, 432], [600, 462], [420, 435], [250, 458], [125, 412], [95, 345], [95, 280], ...L9_SHARED],
 ] };
@@ -312,7 +314,7 @@ const H1 = { motif: "the tilted shore road", archetype: "wander", routes: [[
 ]] };
 
 // IV·2 Charon's Crossing — one weaving crossing, north bank to south.
-const H2 = { motif: "the ferry's weave", archetype: "wander", spotAdjust: -3, routes: [[
+const H2 = { motif: "the ferry's weave", archetype: "wander", routes: [[
   [450, -8], [445, 75], [330, 115], [240, 200], [280, 300], [400, 345],
   [540, 320], [635, 245], [700, 148], [768, 248], [780, 355], [700, 445],
   [555, 470], [400, 452], [255, 488], [145, 445], [-30, 460],
@@ -324,7 +326,7 @@ const H3_SHARED = [
   [500, 270], [640, 238], [765, 285], [805, 385], [705, 458], [545, 430],
   [400, 472], [280, 520], [250, 590],
 ];
-const H3 = { motif: "west road meets north road", archetype: "fork", spotAdjust: -3, routes: [
+const H3 = { motif: "west road meets north road", archetype: "fork", routes: [
   [[-30, 260], [120, 228], [255, 268], [350, 232], [410, 240], ...H3_SHARED],
   [[430, -8], [425, 75], [340, 130], [400, 190], [410, 240], ...H3_SHARED],
 ] };
@@ -357,20 +359,20 @@ const H6_TAIL = [
 // the tridents do: the two routes disagree across BOTH islands, so the
 // per-route average drops below what a single-split fork can reach.
 // Deliberately the hardest shape of stage IV.
-const H6 = { motif: "twice around the islands", archetype: "fork", spotAdjust: -3, routes: [
+const H6 = { motif: "twice around the islands", archetype: "fork", routes: [
   [...H6_HEAD, [300, 110], [390, 150], ...H6_MID, [650, 205], [745, 240], ...H6_TAIL],
   [...H6_HEAD, [300, 250], [390, 210], ...H6_MID, [590, 360], [700, 385], [755, 352], ...H6_TAIL],
 ] };
 
 // IV·7 The Judgement Hall — a great G around the hall, entering from above.
-const H7 = { motif: "a hook around the hall", archetype: "spiral", spotAdjust: -2, routes: [[
+const H7 = { motif: "a hook around the hall", archetype: "spiral", routes: [[
   [560, -8], [555, 70], [400, 60], [240, 85], [120, 160], [90, 290],
   [130, 415], [260, 480], [430, 500], [600, 470], [720, 420], [790, 320],
   [740, 215], [620, 170], [500, 210], [470, 310], [560, 368], [645, 315],
 ]] };
 
 // IV·8 Erebos Deep — sweeps and an undertow curl through the dark.
-const H8 = { motif: "the undertow", archetype: "wander", spotAdjust: -2, routes: [[
+const H8 = { motif: "the undertow", archetype: "wander", routes: [[
   [-30, 100], [140, 75], [330, 110], [520, 80], [700, 110], [815, 165],
   [765, 262], [580, 245], [400, 275], [245, 320], [140, 395], [215, 455],
   [380, 430], [550, 462], [720, 432], [930, 455],
@@ -382,7 +384,7 @@ const H9_SHARED = [
   [480, 285], [365, 335], [300, 435], [425, 488], [570, 455], [665, 385],
   [705, 470], [690, 590],
 ];
-const H9 = { motif: "both rims into the pit", archetype: "fork", spotAdjust: -2, routes: [
+const H9 = { motif: "both rims into the pit", archetype: "fork", routes: [
   [[-30, 165], [130, 135], [300, 175], [440, 145], [510, 195], ...H9_SHARED],
   [[930, 175], [790, 145], [640, 183], [545, 155], [510, 195], ...H9_SHARED],
 ] };
@@ -421,7 +423,7 @@ const O3_SHARED = [
   [430, 220], [510, 150], [650, 120], [790, 150], [835, 240], [805, 330],
   [870, 400], [930, 415],
 ];
-const O3 = { motif: "two causeways fuse", archetype: "fork", spotAdjust: -5, routes: [
+const O3 = { motif: "two causeways fuse", archetype: "fork", routes: [
   [[240, 590], [225, 495], [130, 455], [95, 352], [185, 282], [320, 295], [430, 302], ...O3_SHARED],
   [[660, 590], [672, 500], [720, 438], [680, 322], [580, 290], [430, 302], ...O3_SHARED],
 ] };
@@ -446,21 +448,21 @@ const O5 = { motif: "the long climb", archetype: "wander", routes: [[
 // hammer arm north, tong arm south, and a white-hot hairpin out.
 const O6_HEAD = [[380, 590], [390, 500], [310, 440], [338, 352], [360, 330]];
 const O6_TAIL = [[612, 98], [700, 92], [790, 155], [815, 255], [745, 340], [795, 425], [930, 450]];
-const O6 = { motif: "around the anvil", archetype: "fork", spotAdjust: -3, routes: [
+const O6 = { motif: "around the anvil", archetype: "fork", routes: [
   [...O6_HEAD, [255, 290], [235, 190], [330, 130], [450, 140], [520, 160], ...O6_TAIL],
   [...O6_HEAD, [475, 345], [590, 300], [622, 222], [520, 160], ...O6_TAIL],
 ] };
 
 // V·7 The Aegis Wall — the road threads the gaps in a shattered wall: a
 // square-toothed weave, unlike any other zigzag in the campaign.
-const O7 = { motif: "threading the wall gaps", archetype: "wander", spotAdjust: -5, routes: [[
+const O7 = { motif: "threading the wall gaps", archetype: "wander", routes: [[
   [-30, 275], [105, 268], [172, 158], [268, 118], [315, 222], [352, 345],
   [442, 420], [490, 315], [522, 200], [640, 148], [688, 235], [668, 358],
   [775, 438], [930, 458],
 ]] };
 
 // V·8 Storm of Zeus — a doubled thunderbolt hurled down the map.
-const O8 = { motif: "the doubled bolt", archetype: "wander", spotAdjust: -1, routes: [[
+const O8 = { motif: "the doubled bolt", archetype: "wander", routes: [[
   [350, -8], [360, 70], [470, 105], [600, 80], [690, 150], [560, 195],
   [420, 230], [290, 280], [372, 362], [535, 372], [660, 420], [568, 492],
   [420, 512], [380, 590],
@@ -472,7 +474,7 @@ const O9_AB = [[365, 250], [340, 290]];
 const O9_SHARED = [[245, 318], [150, 378], [196, 462], [340, 498], [430, 590]];
 // The campaign's second trident — see Alpheios Gorge for why it lives at
 // the fork band's floor.
-const O9 = { motif: "three legions, one gate", archetype: "fork", spotAdjust: -6, routes: [
+const O9 = { motif: "three legions, one gate", archetype: "fork", routes: [
   [[930, 80], [790, 104], [620, 72], [490, 110], [415, 205], ...O9_AB, ...O9_SHARED],
   [[930, 255], [785, 275], [615, 240], [480, 215], [415, 205], ...O9_AB, ...O9_SHARED],
   [[930, 430], [780, 405], [610, 445], [460, 405], [380, 330], [340, 290], ...O9_SHARED],

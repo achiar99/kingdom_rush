@@ -41,108 +41,135 @@ function rng(seed) {
 // Built as offset polygons from dense samples rather than strokes, because a
 // stroke has one width for its whole length and the whole point is that this
 // road doesn't.
-export function paveRoad(g, path, theme, widthScale = 1) {
-  const len = pathLength(path);
+//
+// EVERY route is painted in one call, layer by layer — all fringes, then all
+// rims, then all bodies, then all worn tracks — with each layer's polygons
+// merged into a single fill. Painting roads one at a time put the second
+// road's dark fringe ACROSS the first road's dirt, and a fork's merge read
+// as two roads crossing instead of one road joining another. A union per
+// layer has no seams anywhere two swathes overlap, so a Y-junction comes out
+// as smooth as a bend.
+export function paveRoads(g, routes, theme) {
   const STEP = 9;
 
-  // Deterministic per-route phase so two routes on a fork don't wobble in sync.
-  const ph = (path[0].x * 13.37 + path[0].y * 7.91) % 6.283;
-  // 26px half-width. At 30 the swathe plus its fringe painted ~74px, and the
-  // wander generator only guarantees ~85px between corridors — parallel roads
-  // visibly merged into sand lakes. Width has to respect the generator's
-  // clearance floor, not just the reference art. `widthScale` extends the same
-  // rule to the other shapes: fork and serpentine lanes run as close as ~45px,
-  // so those maps paint the road at 0.72 of this.
-  // Long, calm undulations. The first cut wobbled at twice this frequency and
-  // amplitude and the edges read as a lumpy worm rather than a confident road.
-  const halfW = (d) =>
-    26 * widthScale *
-    (1 + 0.06 * Math.sin(d * 0.011 + ph) + 0.04 * Math.sin(d * 0.027 + ph * 2.7));
-
-  // sample centreline + normals once
-  const C = [], N = [], WD = [];
-  for (let d = 0; d <= len; d += STEP) {
-    const p = pointAtDistance(path, len, d);
-    const q = pointAtDistance(path, len, Math.min(len, d + 4));
-    const dx = q.x - p.x, dy = q.y - p.y;
-    const m = Math.hypot(dx, dy) || 1;
-    C.push(p);
-    N.push({ x: -dy / m, y: dx / m });
-    WD.push(halfW(d));
-  }
-
-  const ribbon = (scale, extra = 0) => {
-    g.beginPath();
-    for (let i = 0; i < C.length; i++) {
-      const w = WD[i] * scale + extra;
-      const x = C[i].x + N[i].x * w, y = C[i].y + N[i].y * w;
-      if (i === 0) g.moveTo(x, y); else g.lineTo(x, y);
+  // sample every route's centreline + normals once
+  const sampled = routes.map((path) => {
+    const len = pathLength(path);
+    // Deterministic per-route phase so two routes on a fork don't wobble in sync.
+    const ph = (path[0].x * 13.37 + path[0].y * 7.91) % 6.283;
+    // 26px half-width. At 30 the swathe plus its fringe painted ~74px against
+    // the layouts' guaranteed ~100px corridor clearance — parallel roads
+    // visibly merged into sand lakes. Width has to respect the layouts'
+    // clearance floor, not just the reference art.
+    // Long, calm undulations. The first cut wobbled at twice this frequency and
+    // amplitude and the edges read as a lumpy worm rather than a confident road.
+    const halfW = (d) =>
+      26 * (1 + 0.06 * Math.sin(d * 0.011 + ph) + 0.04 * Math.sin(d * 0.027 + ph * 2.7));
+    const C = [], N = [], WD = [];
+    for (let d = 0; d <= len; d += STEP) {
+      const p = pointAtDistance(path, len, d);
+      const q = pointAtDistance(path, len, Math.min(len, d + 4));
+      const dx = q.x - p.x, dy = q.y - p.y;
+      const m = Math.hypot(dx, dy) || 1;
+      C.push(p);
+      N.push({ x: -dy / m, y: dx / m });
+      WD.push(halfW(d));
     }
-    for (let i = C.length - 1; i >= 0; i--) {
-      const w = WD[i] * scale + extra;
-      g.lineTo(C[i].x - N[i].x * w, C[i].y - N[i].y * w);
+    return { path, C, N, WD };
+  });
+
+  // One layer = one Path2D holding every route's ribbon, filled once.
+  // Non-zero winding turns the overlaps into a plain union.
+  const layer = (scale, extra = 0) => {
+    const p2 = new Path2D();
+    for (const { C, N, WD } of sampled) {
+      for (let i = 0; i < C.length; i++) {
+        const w = WD[i] * scale + extra;
+        const x = C[i].x + N[i].x * w, y = C[i].y + N[i].y * w;
+        if (i === 0) p2.moveTo(x, y); else p2.lineTo(x, y);
+      }
+      for (let i = C.length - 1; i >= 0; i--) {
+        const w = WD[i] * scale + extra;
+        p2.lineTo(C[i].x - N[i].x * w, C[i].y - N[i].y * w);
+      }
+      p2.closePath();
     }
-    g.closePath();
+    return p2;
   };
 
-  // dark grass fringe, then the dirt body, then the worn middle
+  // dark grass fringe, then the dirt body, then the worn middle — the track
+  // is translucent, so the union fill matters twice over there: two stacked
+  // fills would double-darken the merged stretch every route shares
   g.fillStyle = mix(theme.grass[1], "#000000", 0.25);
-  ribbon(1, 5.5);
-  g.fill();
+  g.fill(layer(1, 5.5));
   g.fillStyle = theme.path.rim;
-  ribbon(1, 1.5);
-  g.fill();
+  g.fill(layer(1, 1.5));
   g.fillStyle = theme.path.body;
-  ribbon(1);
-  g.fill();
+  g.fill(layer(1));
   g.globalAlpha = 0.5;
   g.fillStyle = theme.path.track;
-  ribbon(0.52);
-  g.fill();
+  g.fill(layer(0.52));
   g.globalAlpha = 1;
 
-  // grass tufts biting into the verge — the scalloped edge that makes it read
-  // as ground and not as a drawn line
-  // Tufts sit OUTSIDE the verge, hugging it — straddling the edge they read
-  // as litter dropped on the road (worst on snow, where a pale-blue blob on
-  // pale-grey ice looks like a rendering error rather than a snowbank).
-  const rand = rng(9173 + ((path[0].x | 0) << 3));
-  g.fillStyle = theme.grass[1];
-  for (let i = 2; i < C.length - 2; i += 2 + Math.floor(rand() * 3)) {
-    if (rand() < 0.45) continue;
-    for (const side of [-1, 1]) {
-      if (rand() < 0.4) continue;
-      const w = WD[i] + 7 + rand() * 2;
-      const tx = C[i].x + N[i].x * w * side;
-      const ty = C[i].y + N[i].y * w * side;
-      const rr = 2 + rand() * 3;
-      g.beginPath();
-      // squash the tuft along the road direction so the edge scallops
-      g.ellipse(tx, ty, rr * 1.6, rr, Math.atan2(N[i].x, -N[i].y), 0, Math.PI * 2);
-      g.fill();
+  // Distance from a point to the nearest OTHER route — junction tests below.
+  const nearOther = (self, x, y, within) => {
+    for (const s of sampled) {
+      if (s === self) continue;
+      const on = nearestPointOnPath(s.path, x, y);
+      if (dist(x, y, on.x, on.y) < within) return true;
     }
-  }
+    return false;
+  };
 
-  // speckles and the odd pebble worn into the dirt — at RANDOM spacing. On a
-  // fixed stride they lined the road like beads on a string.
-  for (let i = 1; i < C.length - 1; i += 2 + Math.floor(rand() * 7)) {
-    if (rand() < 0.45) continue;
-    const off = (rand() * 2 - 1) * WD[i] * 0.7;
-    const px = C[i].x + N[i].x * off, py = C[i].y + N[i].y * off;
-    if (rand() < 0.85) {
-      g.fillStyle = `rgba(70,50,26,${0.10 + rand() * 0.12})`;
-      g.beginPath();
-      g.arc(px, py, 1.2 + rand() * 2, 0, Math.PI * 2);
-      g.fill();
-    } else {
-      g.fillStyle = mix(theme.path.rim, "#888078", 0.5);
-      g.beginPath();
-      g.ellipse(px, py, 2.6, 1.8, rand() * 3, 0, Math.PI * 2);
-      g.fill();
-      g.fillStyle = "rgba(255,255,255,0.25)";
-      g.beginPath();
-      g.arc(px - 0.7, py - 0.6, 0.9, 0, Math.PI * 2);
-      g.fill();
+  for (const s of sampled) {
+    const { path, C, N, WD } = s;
+    // grass tufts biting into the verge — the scalloped edge that makes it
+    // read as ground and not as a drawn line. Tufts sit OUTSIDE the verge,
+    // hugging it — straddling the edge they read as litter dropped on the
+    // road — and NEVER near another route: a tuft placed off route A's verge
+    // can land in the middle of route B's dirt at a junction.
+    const rand = rng(9173 + ((path[0].x | 0) << 3));
+    g.fillStyle = theme.grass[1];
+    for (let i = 2; i < C.length - 2; i += 2 + Math.floor(rand() * 3)) {
+      if (rand() < 0.45) continue;
+      for (const side of [-1, 1]) {
+        if (rand() < 0.4) continue;
+        const w = WD[i] + 7 + rand() * 2;
+        const tx = C[i].x + N[i].x * w * side;
+        const ty = C[i].y + N[i].y * w * side;
+        if (nearOther(s, tx, ty, 40)) continue;
+        const rr = 2 + rand() * 3;
+        g.beginPath();
+        // squash the tuft along the road direction so the edge scallops
+        g.ellipse(tx, ty, rr * 1.6, rr, Math.atan2(N[i].x, -N[i].y), 0, Math.PI * 2);
+        g.fill();
+      }
+    }
+
+    // speckles and the odd pebble worn into the dirt — at RANDOM spacing. On
+    // a fixed stride they lined the road like beads on a string. Skipped
+    // where another route runs the same ground (a fork's shared tail is in
+    // every route), or the shared stretch collects every route's litter.
+    for (let i = 1; i < C.length - 1; i += 2 + Math.floor(rand() * 7)) {
+      if (rand() < 0.45) continue;
+      const off = (rand() * 2 - 1) * WD[i] * 0.7;
+      const px = C[i].x + N[i].x * off, py = C[i].y + N[i].y * off;
+      if (s !== sampled[0] && nearOther(s, px, py, 10)) continue;
+      if (rand() < 0.85) {
+        g.fillStyle = `rgba(70,50,26,${0.10 + rand() * 0.12})`;
+        g.beginPath();
+        g.arc(px, py, 1.2 + rand() * 2, 0, Math.PI * 2);
+        g.fill();
+      } else {
+        g.fillStyle = mix(theme.path.rim, "#888078", 0.5);
+        g.beginPath();
+        g.ellipse(px, py, 2.6, 1.8, rand() * 3, 0, Math.PI * 2);
+        g.fill();
+        g.fillStyle = "rgba(255,255,255,0.25)";
+        g.beginPath();
+        g.arc(px - 0.7, py - 0.6, 0.9, 0, Math.PI * 2);
+        g.fill();
+      }
     }
   }
 }

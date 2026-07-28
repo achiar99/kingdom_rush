@@ -11,6 +11,7 @@
 // for the ride whenever something needs the two-dimensional view.
 import { generateMap } from "./mapgen.js";
 import { LAYOUTS } from "./layouts.js";
+import { CALIBRATION } from "./calibration.js";
 import { generateWaves } from "./waves.js";
 import { STAGES, THEMES, LEVELS_PER_STAGE, CAMPAIGN, band, bandInt, goldForHpScale } from "./stages.js";
 
@@ -67,16 +68,28 @@ function buildLevel(stage, stageIndex, levelInStage) {
   // Multi-route maps deal two extra build spots per extra road: the roads
   // split the towers' attention, and the extra ground is most of the
   // compensation (the rest is the hard-level edge forks are placed for — see
-  // FORK_EXPOSURE_BAND). A layout may also trim its own count (spotAdjust):
-  // exposure is *average road watched per spot*, so a compact map holds its
-  // defensibility band with fewer, better spots rather than by growing road
-  // it has no room for.
+  // FORK_EXPOSURE_BAND).
   const map = generateMap(mapSeed(index), {
-    spots: Math.max(6,
-      spots + (layout.routes.length - 1) * 2 + (layout.spotAdjust || 0)),
-    layout });
+    spots: spots + (layout.routes.length - 1) * 2, layout });
   const waveCount = Math.round(ramp(CAMPAIGN.waveCount, index));
-  const hpScale = Number(band(stage.hpScale, levelInStage).toFixed(2));
+  // The stage band says how hard this slot in the campaign should be; the
+  // map's measured exposure says how much tower fire ITS shape affords, and
+  // the enemy's HP is normalised by it so the two never fight. Without this,
+  // hand-authored variety leaks straight into difficulty: the balance
+  // harness measured a compact map at the exposure floor as unwinnable at
+  // the same band value its long-road neighbour cleared at 81%. References
+  // sit near the top of each family's band (see mapgen.js) so the factor
+  // mostly *relieves* compact maps; forks keep their own lower reference —
+  // being harder than a single road is what forks are for. The exponent is
+  // above 1 because startGold scales with hpScale: relief also shrinks the
+  // purse, clawing part of itself back.
+  // ...and the residual each map's CHARACTER costs — the part no metric
+  // captures — is measured by tools/sim/calibrate.js and stored per level
+  // in calibration.js. band × norm × calibration is the whole formula.
+  const ref = map.routes.length > 1 ? 380 : 460;
+  const norm = Math.pow(Math.min(1, map.exposure / ref), 1.25);
+  const hpScale = Number(
+    (band(stage.hpScale, levelInStage) * norm * (CALIBRATION[index] ?? 1)).toFixed(2));
 
   return {
     id: `${stage.id}-${levelInStage + 1}`,

@@ -174,25 +174,33 @@ function pickSpots(routes, rand, count) {
 }
 
 // ------------------------------------------------------- defensibility
-// How much tower fire a map affords: the average length of road one build
-// spot watches. (Algebraically: for every point on the road, count the spots
-// that could shoot it, integrate along the route, divide by spot count.)
-// It is, near enough, the total damage one tower gets to deal over one
-// creep's journey — so it predicts how hard the map plays.
+// How much tower fire a map affords: the average length of road one of the
+// map's BEST build spots watches. It is, near enough, the total damage one
+// well-placed tower gets to deal over one creep's journey — so it predicts
+// how hard the map plays.
+//
+// Averaged over the top nine spots, not all of them, deliberately: a player
+// (and the harness bot) builds the best ground first, so two maps with the
+// same nine prime spots play the same whether one of them also offers three
+// mediocre extras. Averaging over ALL spots taught exactly the wrong lesson —
+// trimming a map's worst spots raised its score while removing real towers
+// from real runs, and the balance harness measured those "improved" maps at
+// near-0% win rates.
 //
 // This number is why maps need validating at all. Left unchecked it varied
 // 2.1× across fifty seeds of the old generator, and the balance harness
 // showed that variance swamping every intentional difficulty setting: two
 // levels with the same enemy HP measured 98% and 0% win rates purely because
 // one map's spots covered the road and the other's didn't.
-export function exposurePerSpot(path, spots, range = 130) {
+export function exposurePerSpot(path, spots, range = 130, topN = 9) {
   if (!spots.length) return 0;
-  const len = pathLength(path);
   const samples = samplePath(path, 10);
-  let overlap = 0;
-  for (const p of samples)
-    for (const s of spots) if (dist(s.x, s.y, p.x, p.y) <= range) overlap++;
-  return (overlap / samples.length) * len / spots.length;
+  const per = spots.map((s) => {
+    let n = 0;
+    for (const p of samples) if (dist(s.x, s.y, p.x, p.y) <= range) n++;
+    return n * 10;                       // samples sit 10px apart along the road
+  }).sort((a, b) => b - a).slice(0, Math.min(topN, spots.length));
+  return per.reduce((a, b) => a + b, 0) / per.length;
 }
 
 // The band a map has to land in to be used. Narrow on purpose: variety should
@@ -202,12 +210,13 @@ export function exposurePerSpot(path, spots, range = 130) {
 // what lifts a spot's average coverage into this range.
 //
 // Re-derived for the hand-authored campaign (as it was re-derived when the
-// generated roads were shortened): most blueprints deliver 420-478, and the
-// deliberately compact shapes — staircases, weaves, the hooked L — bottom
-// out just above 400. The band is the lint that catches a blueprint whose
-// spots can't watch its road; the balance harness in tools/sim is what
-// actually prices the residual spread.
-export const EXPOSURE_BAND = [400, 480];
+// generated roads were shortened): most blueprints deliver 400-477, and the
+// two deliberately compact climbs (the Burning Ships switchbacks, the Aegis
+// Wall weave) bottom out at ~383 as their stages' intended spikes. The band
+// is the lint that catches a blueprint whose spots can't watch its road;
+// the balance harness in tools/sim is what actually prices the residual
+// spread — stage hpScale bands are refit against these maps.
+export const EXPOSURE_BAND = [380, 480];
 
 // Forks keep their own lower floor: ground watching branch A isn't watching
 // branch B, so the per-spot average over each single route sits lower even

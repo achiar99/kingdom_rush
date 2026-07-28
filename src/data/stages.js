@@ -140,7 +140,13 @@ export const STAGES = [
     // happily report an enormous first-level value that "still wins 100%".
     // That is not a difficulty reading — it means hpScale barely controls
     // difficulty there at all. Take those with judgement.
-    hpScale: [1.0, 1.3],
+    // Refit against the hand-authored maps (interior-slot fit; the first
+    // level is anchored at 1.0 by design — the fitter's own caveat above
+    // applies, hpScale barely bites that early). Every band below comes from
+    // solving slots 3 and 8 of the stage and drawing the line through them,
+    // with each level's exposure normalisation (levels.js) already factored
+    // out, so the numbers here stay pure stage-difficulty dials.
+    hpScale: [1.0, 2.8],
     icon: "🛡️",
   },
   {
@@ -148,7 +154,7 @@ export const STAGES = [
     blurb: "Past the last olive terrace, older things are still awake.",
     kit: "arcadia",
     themes: ["olive", "arkadia", "alpheios"],
-    hpScale: [1.9, 1.3],
+    hpScale: [3.2, 2.7],
     icon: "🌿",
   },
   {
@@ -156,7 +162,7 @@ export const STAGES = [
     blurb: "Every corridor doubles back. Something is counting your turns.",
     kit: "labyrinth",
     themes: ["idaSnow", "frostwood", "glacier"],
-    hpScale: [3.7, 4.9],
+    hpScale: [2.2, 4.4],
     icon: "🐂",
   },
   {
@@ -164,7 +170,7 @@ export const STAGES = [
     blurb: "The dead are many, and they are no longer resting.",
     kit: "hades",
     themes: ["asphodel", "greyreach", "stygian"],
-    hpScale: [3.8, 5.7],
+    hpScale: [2.4, 6.3],
     icon: "💀",
   },
   {
@@ -172,7 +178,7 @@ export const STAGES = [
     blurb: "What the gods buried is climbing back up the mountain.",
     kit: "olympus",
     themes: ["othrys", "emberwaste", "shadowpeak"],
-    hpScale: [2.8, 3.5],
+    hpScale: [3.9, 2.8],
     icon: "⚡",
   },
 ];

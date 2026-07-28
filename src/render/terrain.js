@@ -10,7 +10,7 @@ import { CONFIG } from "../config.js";
 import { TOWER_TYPES } from "../data/towerTypes.js";
 import { state, PATH, PATHS, BUILD_SPOTS, LEVEL, THEME, spotOccupied } from "../state.js";
 import { ctx, groundShadow } from "./canvas.js";
-import { paveRoad, dirtPatch, scatterProps, frameGround, frameTrees, groves, placeLandmark } from "./scenery.js";
+import { paveRoads, dirtPatch, scatterProps, frameGround, frameTrees, groves, placeLandmark } from "./scenery.js";
 import { drawBackdrop } from "./backdrop.js";
 
 const W = CONFIG.width, H = CONFIG.height;
@@ -81,15 +81,12 @@ function paintScenery() {
   // road visibly breaks through it at every entry and exit
   frameGround(g, THEME);
 
-  // Secondary routes first, primary last, so where a fork's branches merge the
-  // primary's paving sits on top and the joint reads as one road. Every route
-  // gets the full-width swathe: the hand-authored layouts guarantee 100px+
-  // between corridors, so the old narrow-road compensation for cramped fork
-  // and serpentine lanes is gone with the cramped lanes themselves.
-  for (let i = routes.length - 1; i >= 0; i--)
-    paveRoad(g, routes[i], THEME);
+  // All routes in one call: each paint layer is unioned across every route,
+  // so a fork's merge comes out as one smooth Y instead of two roads stacked
+  // on top of each other (see paveRoads).
+  paveRoads(g, routes, THEME);
   scatterProps(g, routes, BUILD_SPOTS, LEVEL.stageId, LEVEL.index + 1);
-
+  
   // Every build spot's dirt patch, part of the ground itself. A tower built
   // later stands on its patch; the signpost (drawn live in drawBuildSpots)
   // disappears, the patch stays.
