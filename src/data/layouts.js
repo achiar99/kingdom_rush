@@ -12,9 +12,14 @@
 //
 // The vocabulary, so no two of the fifty feel alike:
 //   wander      one road: S-sweeps, meanders, staircases, hooks, weaves
-//   fork        two or three roads that MERGE — Y-merges (separate entrances),
-//               diamonds (one road splits around an island and rejoins),
-//               tridents (three entrances), a double diamond
+//   fork        two or three roads that MERGE. Nearly half the campaign, and
+//               every junction is its own topology: Y-merges near, mid and
+//               far; a merge at the very first step and one at the very
+//               last; diamonds (around an island, angular, asymmetric, a
+//               shortcut vs the long way, a double diamond); pincers from
+//               opposite edges, from above-and-below, and on the diagonal;
+//               converging staircases; a T-junction; a three-way star;
+//               two tridents
 //   spiral      the road coils inward; the temple stands in its heart
 //   serpentine  the classic boustrophedon, saved for each stage's finale
 //
@@ -71,12 +76,16 @@ const T4 = { motif: "a coil around the shrine", archetype: "spiral", routes: [[
   [430, 380], [555, 340], [580, 250], [480, 218], [425, 268],
 ]] };
 
-// I·5 Tenedos Strait — a lightning Z across the whole strait.
-const T5 = { motif: "a lightning Z", archetype: "wander", routes: [[
-  [700, -8], [685, 80], [560, 120], [400, 100], [250, 145], [340, 235],
-  [510, 270], [680, 240], [800, 290], [720, 380], [540, 415], [350, 385],
-  [180, 420], [100, 500], [80, 590],
-]] };
+// I·5 Tenedos Strait — FORK, the LATE merge: two fleets sail their own
+// straits the whole width of the map, out and back, and only join for the
+// last hundred paces before the harbour. Nothing is shared until the end.
+const T5_SHARED = [[-30, 290]];
+const T5 = { motif: "two straits, one harbour", archetype: "fork", routes: [
+  [[-30, 95], [140, 115], [330, 80], [520, 110], [700, 82], [805, 145],
+   [735, 210], [545, 235], [350, 205], [160, 232], [95, 288], ...T5_SHARED],
+  [[-30, 485], [140, 462], [330, 495], [520, 468], [700, 492], [805, 432],
+   [735, 368], [545, 342], [350, 372], [160, 345], [95, 288], ...T5_SHARED],
+] };
 
 // I·6 The Scaean Gate — FORK: one road splits around the gatehouse hill and
 // rejoins before the gate. The island between the arms is prime ground.
@@ -131,13 +140,18 @@ const A1 = { motif: "an oxbow through the terraces", archetype: "wander", routes
   [590, 70], [470, 110], [430, -8],
 ]] };
 
-// II·2 Ladon River — the river's own L: down the west bank in switchbacks,
-// east along the shallows, and a hooked climb out.
-const A2 = { motif: "the river's L, hooked", archetype: "wander", routes: [[
-  [130, -8], [140, 70], [225, 138], [118, 215], [225, 288], [118, 362],
-  [190, 438], [330, 478], [440, 395], [560, 458], [690, 472], [795, 438],
-  [812, 368], [738, 312], [830, 242], [742, 182], [820, 125], [930, 110],
-]] };
+// II·2 Ladon River — FORK, the EARLY merge: two headwater brooks fall from
+// opposite corners of the north rim and become one river almost at once;
+// everything after the confluence is a single long meander. The mirror of
+// Tenedos Strait's last-second join.
+const A2_SHARED = [
+  [440, 205], [320, 262], [205, 318], [258, 408], [400, 440], [560, 408],
+  [680, 465], [800, 422], [832, 322], [762, 252], [855, 180], [930, 165],
+];
+const A2 = { motif: "headwaters meet at once", archetype: "fork", routes: [
+  [[130, -8], [150, 75], [300, 105], [450, 115], ...A2_SHARED],
+  [[770, -8], [750, 75], [600, 105], [450, 115], ...A2_SHARED],
+] };
 
 // II·3 Erymanthos Pass — FORK: twin creeks fall from the north rim and meet
 // mid-field; the merged water winds out along the south shore.
@@ -174,13 +188,17 @@ const A6 = { motif: "a split around the tarn", archetype: "fork", routes: [
   [...A6_HEAD, [505, 285], [515, 355], [455, 410], [390, 420], ...A6_TAIL],
 ] };
 
-// II·7 The Centaur Fords — the mirrored hook: along the south shore, up the
-// far bank, and inward to the ford.
-const A7 = { motif: "a hook to the ford", archetype: "spiral", routes: [[
-  [-30, 460], [130, 490], [320, 460], [510, 490], [680, 450], [780, 360],
-  [800, 245], [720, 150], [570, 95], [400, 80], [240, 120], [180, 220],
-  [240, 320], [380, 360], [500, 330], [540, 240], [460, 185], [370, 218],
-]] };
+// II·7 The Centaur Fords — FORK, the SHORTCUT: the road splits at the bank
+// into the ford (dead straight across the middle) and the long way round
+// the southern marsh. The first fork whose two arms are nothing alike in
+// length — half the herd arrives long before the rest.
+const A7_HEAD = [[-30, 268], [110, 248], [250, 280]];
+const A7_TAIL = [[758, 240], [828, 300], [790, 400], [868, 438], [930, 450]];
+const A7 = { motif: "the ford or the long way round", archetype: "fork", routes: [
+  [...A7_HEAD, [370, 242], [490, 288], [610, 244], [680, 268], ...A7_TAIL],
+  [...A7_HEAD, [300, 372], [282, 468], [420, 498], [590, 465], [662, 372],
+   [688, 306], [680, 268], ...A7_TAIL],
+] };
 
 // II·8 Cave of the Lion — a hard zigzag down the gorge to the cave mouth.
 const A8 = { motif: "a zigzag down the gorge", archetype: "wander", routes: [[
@@ -225,12 +243,17 @@ const L1 = { motif: "a horseshoe with a quay lip", archetype: "wander", routes: 
   [282, 330], [348, 360], [500, 345], [650, 360], [790, 345], [930, 362],
 ]] };
 
-// III·2 Palace Steps — a staircase descending west, step by frozen step.
-const L2 = { motif: "a staircase down the palace", archetype: "wander", routes: [[
-  [930, 70], [780, 62], [620, 88], [720, 195], [600, 235], [490, 185],
-  [420, 258], [500, 322], [400, 390], [268, 352], [185, 428], [255, 492],
-  [230, 590],
-]] };
+// III·2 Palace Steps — FORK: two staircases leave the palace's east front a
+// floor apart and descend flight by flight, drawing closer with every turn
+// until they meet at the bottom landing. Converging stairways — no other
+// fork narrows gradually.
+const L2_SHARED = [[295, 445], [178, 415], [92, 468], [110, 590]];
+const L2 = { motif: "stairways that converge", archetype: "fork", routes: [
+  [[930, 65], [780, 58], [645, 95], [668, 185], [540, 228], [425, 262],
+   [452, 352], [390, 410], ...L2_SHARED],
+  [[930, 255], [798, 250], [692, 290], [572, 340], [600, 418], [480, 452],
+   [390, 410], ...L2_SHARED],
+] };
 
 // III·3 The Bronze Doors — FORK: two doors in the north wall, roads that
 // curve together at once, then a long shared coil through the halls.
@@ -276,13 +299,18 @@ const L7 = { motif: "the wound thread", archetype: "spiral", routes: [[
   [350, 330],
 ]] };
 
-// III·8 The Deep Coil — a vertical S with a hooked crown: up from the depths,
-// around the gallery, out the top.
-const L8 = { motif: "an S out of the depths", archetype: "wander", routes: [[
-  [430, 590], [445, 505], [335, 460], [245, 370], [300, 255], [430, 225],
-  [560, 275], [655, 370], [762, 412], [828, 335], [798, 225], [685, 175],
-  [560, 115], [430, 82], [300, 112], [250, -8],
-]] };
+// III·8 The Deep Coil — FORK, the VICE: one column bores down from the
+// ceiling and sweeps the upper halls, one climbs from the depths, and the
+// jaws close at the west wall — then the merged horde marches back east
+// through the middle, between its own entry roads.
+const L8_SHARED = [
+  [220, 378], [390, 356], [560, 385], [725, 355], [845, 402], [930, 412],
+];
+const L8 = { motif: "jaws from above and below", archetype: "fork", routes: [
+  [[470, -8], [462, 68], [610, 92], [755, 122], [798, 215], [700, 252],
+   [520, 228], [340, 248], [160, 228], [100, 295], ...L8_SHARED],
+  [[470, 590], [452, 508], [280, 490], [115, 458], [92, 352], [100, 295], ...L8_SHARED],
+] };
 
 // III·9 Forge of Talos — FORK: fire doors east; two roads sweep the whole
 // width, meet at the west wall, and march back through the middle.
@@ -313,12 +341,17 @@ const H1 = { motif: "the tilted shore road", archetype: "wander", routes: [[
   [160, 155], [340, 180], [520, 125], [700, 155], [820, 105], [930, 90],
 ]] };
 
-// IV·2 Charon's Crossing — one weaving crossing, north bank to south.
-const H2 = { motif: "the ferry's weave", archetype: "wander", routes: [[
-  [450, -8], [445, 75], [330, 115], [240, 200], [280, 300], [400, 345],
-  [540, 320], [635, 245], [700, 148], [768, 248], [780, 355], [700, 445],
-  [555, 470], [400, 452], [255, 488], [145, 445], [-30, 460],
-]] };
+// IV·2 Charon's Crossing — FORK, the STAR: three landings on the west shore
+// and every soul walks to the same crossing — the only junction in the game
+// where three roads meet at a single point.
+const H2_SHARED = [
+  [560, 255], [700, 228], [812, 288], [768, 392], [628, 435], [560, 505], [555, 590],
+];
+const H2 = { motif: "three roads, one crossing", archetype: "fork", routes: [
+  [[200, -8], [210, 80], [300, 150], [400, 225], [470, 280], ...H2_SHARED],
+  [[-30, 280], [130, 255], [300, 292], [390, 288], [470, 280], ...H2_SHARED],
+  [[210, 590], [225, 500], [330, 410], [420, 330], [470, 280], ...H2_SHARED],
+] };
 
 // IV·3 Fields of Asphodel — FORK: the west road and the north road meet
 // among the asphodel and wander out together past the pools.
@@ -364,12 +397,18 @@ const H6 = { motif: "twice around the islands", archetype: "fork", routes: [
   [...H6_HEAD, [300, 250], [390, 210], ...H6_MID, [590, 360], [700, 385], [755, 352], ...H6_TAIL],
 ] };
 
-// IV·7 The Judgement Hall — a great G around the hall, entering from above.
-const H7 = { motif: "a hook around the hall", archetype: "spiral", routes: [[
-  [560, -8], [555, 70], [400, 60], [240, 85], [120, 160], [90, 290],
-  [130, 415], [260, 480], [430, 500], [600, 470], [720, 420], [790, 320],
-  [740, 215], [620, 170], [500, 210], [470, 310], [560, 368], [645, 315],
-]] };
+// IV·7 The Judgement Hall — FORK, the T-JUNCTION: a side road drops from
+// the north and dead-ends onto the processional way, and the merged column
+// walks the great G all the way around the hall to the judgement seat.
+const H7_SHARED = [
+  [430, 62], [250, 88], [122, 162], [92, 290], [130, 415], [260, 480],
+  [430, 500], [600, 470], [720, 420], [790, 320], [740, 215], [618, 180],
+  [500, 210], [470, 310], [560, 368], [645, 315],
+];
+const H7 = { motif: "a side door onto the procession", archetype: "fork", routes: [
+  [[660, -8], [655, 58], [548, 73], ...H7_SHARED],
+  [[930, 108], [800, 120], [690, 86], [548, 73], ...H7_SHARED],
+] };
 
 // IV·8 Erebos Deep — sweeps and an undertow curl through the dark.
 const H8 = { motif: "the undertow", archetype: "wander", routes: [[
@@ -401,12 +440,16 @@ const H10 = { motif: "the serpentine that coils", archetype: "serpentine", route
 // ============================================================== Stage V
 // The Wrath of Olympus — scorched black rock; grand, violent geometry.
 
-// V·1 Foot of Othrys — two and a half sweeps of lava plain, exiting skyward.
-const O1 = { motif: "sweeps of the burnt plain", archetype: "wander", routes: [[
-  [930, 470], [770, 445], [570, 485], [380, 448], [190, 480], [95, 395],
-  [165, 318], [360, 290], [560, 330], [755, 295], [838, 215], [762, 140],
-  [560, 168], [360, 132], [165, 162], [90, 90], [110, -8],
-]] };
+// V·1 Foot of Othrys — FORK: two lava flows pour off the volcano's rim and
+// run down opposite walls of the caldera in switchbacks, meeting at the
+// bottom gate. The whole middle of the field stands empty between them.
+const O1_SHARED = [[452, 538], [450, 590]];
+const O1 = { motif: "lava down both rims", archetype: "fork", routes: [
+  [[250, -8], [238, 66], [118, 102], [205, 195], [88, 288], [198, 378],
+   [100, 455], [250, 490], [400, 486], [460, 482], ...O1_SHARED],
+  [[650, -8], [662, 66], [782, 102], [695, 195], [812, 288], [702, 378],
+   [800, 455], [650, 490], [500, 486], [460, 482], ...O1_SHARED],
+] };
 
 // V·2 The Shattered Plain — the crater road: a ring around the impact, then
 // a fatal spiral down into it.
@@ -461,12 +504,18 @@ const O7 = { motif: "threading the wall gaps", archetype: "wander", routes: [[
   [775, 438], [930, 458],
 ]] };
 
-// V·8 Storm of Zeus — a doubled thunderbolt hurled down the map.
-const O8 = { motif: "the doubled bolt", archetype: "wander", routes: [[
-  [350, -8], [360, 70], [470, 105], [600, 80], [690, 150], [560, 195],
-  [420, 230], [290, 280], [372, 362], [535, 372], [660, 420], [568, 492],
-  [420, 512], [380, 590],
-]] };
+// V·8 Storm of Zeus — FORK, the DIAGONAL pincer: one storm front rolls in
+// from the north-east sky, one up from the south-west plain, and they slam
+// together dead centre; the merged bolt discharges out the south-east.
+const O8_SHARED = [
+  [555, 295], [665, 342], [705, 442], [820, 472], [930, 482],
+];
+const O8 = { motif: "two storm fronts collide", archetype: "fork", routes: [
+  [[700, -8], [692, 68], [790, 120], [740, 205], [600, 180], [468, 214],
+   [455, 272], ...O8_SHARED],
+  [[-30, 390], [110, 415], [240, 455], [350, 395], [298, 310], [380, 268],
+   [455, 272], ...O8_SHARED],
+] };
 
 // V·9 Gates of Olympus — TRIDENT: three legions in from the east, merging
 // west, and the merged storm breaks out the south-west gate.

@@ -31,7 +31,7 @@ const ITINERARY = {
   ],
   labyrinth: [
     "Harbour of Amnisos", "Palace Steps", "The Bronze Doors", "First Turning",
-    "Hall of Double Axes", "The Sunken Cistern", "Ariadne's Thread", "The Deep Coil",
+    "Hall of Double Axes", "The Sunken Cistern", "Ariadne's Thread", "The Closing Jaws",
     "Forge of Talos", "The Heart of the Maze",
   ],
   hades: [
@@ -59,11 +59,10 @@ function buildLevel(stage, stageIndex, levelInStage) {
   const index = stageIndex * LEVELS_PER_STAGE + levelInStage;
   const spots = Math.round(ramp(CAMPAIGN.spots, index));
   // Every level's route is a hand-authored blueprint — see layouts.js for the
-  // full vocabulary (wanders, Y-forks, diamonds, tridents, coils, staircases,
-  // and each stage's serpentine finale). The rhythm within a stage keeps the
-  // old cadence — forks at the 3rd/6th/9th levels as the "hard level" shape,
-  // coils at the 4th/7th, the finale a serpentine arena for the master fight —
-  // but every single blueprint is its own map.
+  // full vocabulary (wanders, Y-forks, diamonds, pincers, tridents, coils,
+  // staircases, and each stage's serpentine finale). Forks are nearly half
+  // the campaign — every stage fields four or five, no two topologically
+  // alike — with the finale always a serpentine arena for the master fight.
   const layout = LAYOUTS[index];
   // Multi-route maps deal two extra build spots per extra road: the roads
   // split the towers' attention, and the extra ground is most of the
