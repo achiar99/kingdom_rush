@@ -165,6 +165,25 @@ export function deleteSlot(i) {
 // progress when the flag goes away.
 export const levelsUnlocked = () => (UNLOCK_ALL ? LEVELS.length : progress.unlocked);
 
+// ------------------------------------------------------------------ heroes
+// A champion is recruited the moment its `unlockAt` level becomes reachable
+// (see data/hero.js for the schedule). Once recruited it stays available on
+// every level, replays of the early ones included — the war remembers who
+// answered the call. Nothing is stamped into the save: like levelsUnlocked,
+// this is derived from `progress.unlocked` at read time.
+export const heroUnlocked = (key) =>
+  UNLOCK_ALL || (HEROES[key] && levelsUnlocked() > HEROES[key].unlockAt);
+export const anyHeroUnlocked = () => Object.keys(HEROES).some(heroUnlocked);
+
+// The hero a battle actually fields: the slot's pick if it's recruited, the
+// most recently recruited champion otherwise, and null before Achilles
+// arrives — the first four levels are fought with towers alone.
+export function fieldedHero() {
+  if (heroUnlocked(progress.hero)) return progress.hero;
+  const recruited = Object.keys(HEROES).filter(heroUnlocked);
+  return recruited.length ? recruited[recruited.length - 1] : null;
+}
+
 export function getDifficulty() {
   return DIFFICULTIES[progress.difficulty] || DIFFICULTIES.normal;
 }

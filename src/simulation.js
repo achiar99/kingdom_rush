@@ -8,12 +8,12 @@ import { CONFIG } from "./config.js";
 import { wavesFor } from "./data/levels.js";
 import { MASTERS } from "./data/enemyKits.js";
 import { newUnlocksAt } from "./data/unlocks.js";
-import { HERO_LEVELING, HEROES, DEFAULT_HERO } from "./data/hero.js";
+import { HERO_LEVELING, HEROES } from "./data/hero.js";
 import { FIRE, SUMMON } from "./data/abilities.js";
 import { dist, pointAtDistance } from "./geometry.js";
 import { state, PATH, PATHS, PATH_LEN, LEVEL } from "./state.js";
 import { makeEnemy, damageEnemy, gainHeroXp, makeHero } from "./entities.js";
-import { getDifficulty, markComplete, unlockLevel, progress } from "./save.js";
+import { getDifficulty, markComplete, unlockLevel, fieldedHero } from "./save.js";
 import {
   heroPowerMul, startGoldMul, startLivesBonus, earlyCallGoldBonus,
 } from "./data/store.js";
@@ -25,7 +25,11 @@ import { simHooks } from "./simHooks.js";
 // display (which difficulty and hero this run is being played with).
 export function resetRun() {
   const diff = getDifficulty();
-  const heroDef = HEROES[progress.hero] || HEROES[DEFAULT_HERO];
+  // No champion has been recruited yet in the campaign's first levels —
+  // fieldedHero() is null there and the battle is towers alone. Every
+  // consumer of state.hero already guards against its absence.
+  const heroKey = fieldedHero();
+  const heroDef = heroKey ? HEROES[heroKey] : null;
   const endP = PATH[PATH.length - 1];
   // The path's true end can sit off-screen (top-exit maps end at y=-8), and
   // the hero used to spawn beside it — standing in the sky, on the horizon
@@ -37,7 +41,8 @@ export function resetRun() {
     lives: Math.round(LEVEL.startLives * diff.livesMul) + startLivesBonus(),
     waveIndex: -1,
     enemies: [], towers: [], projectiles: [], effects: [],
-    hero: makeHero({ x: heroX, y: heroY }, heroDef), // starts guarding the castle
+    // starts guarding the castle — when a champion has answered the call
+    hero: heroDef ? makeHero({ x: heroX, y: heroY }, heroDef) : null,
     summonedSoldiers: [], abilityCooldowns: { soldiers: 0, fire: 0 },
     spawnQueue: [], clock: 0, wavePaid: [],
     nextWaveIn: 0,     // no clock before wave 1 — the player opens the battle
@@ -48,6 +53,25 @@ export function resetRun() {
   return { diff, heroDef };
 }
 
+// How early the player may hurry the next wave while the current one still
+// has creeps on the road. Unlimited stacking let the early-call bonus be
+// farmed by summoning three waves into a prepared killbox; now hurrying mid-
+// fight only trims the tail of the countdown, and the big bonuses are earned
+// the honest way — by actually clearing the field first.
+export const EARLY_CALL_WINDOW = 15;
+
+// May the player's button launch the next wave right now? Two honest ways:
+// the field is CLEAR (nothing left to spawn, nothing left alive), or the
+// next wave is inside the last EARLY_CALL_WINDOW seconds of its countdown.
+// update()'s automatic launch always passes — its countdown just hit zero.
+export function canCallNextWave() {
+  if (state.over) return false;
+  if (state.waveIndex === -1) return true;             // "Begin" starts wave 1
+  if (state.waveIndex + 1 >= wavesFor(LEVEL).length) return false;
+  const fieldClear = state.spawnQueue.length === 0 && state.enemies.length === 0;
+  return fieldClear || state.nextWaveIn <= EARLY_CALL_WINDOW;
+}
+
 // Called by the player's button, and by update() when the countdown expires.
 // The only difference between the two is how much time was left on the clock,
 // which is exactly what the early-call bonus pays for — so both go through
@@ -55,11 +79,11 @@ export function resetRun() {
 //
 // Note there is no `state.running` guard: the clock to wave N+1 starts when
 // wave N starts, not when wave N dies, so waves are expected to overlap and
-// this can legitimately be called with creeps still on the road.
+// this can legitimately be called with creeps still on the road — but only
+// inside the rules canCallNextWave() sets out above.
 export function startNextWave() {
-  if (state.over) return;
+  if (!canCallNextWave()) return;
   const waves = wavesFor(LEVEL);
-  if (state.waveIndex + 1 >= waves.length) return;
 
   const bonus = earlyCallBonus();
   if (bonus > 0) {

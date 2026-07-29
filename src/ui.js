@@ -19,7 +19,7 @@ import * as act from "./actions.js";
 import { withCanvas } from "./render/canvas.js";
 import { drawTower } from "./render/towers.js";
 import { canvas } from "./render.js";
-import { startNextWave, resetRun, earlyCallBonus } from "./simulation.js";
+import { startNextWave, resetRun, earlyCallBonus, canCallNextWave, EARLY_CALL_WINDOW } from "./simulation.js";
 import { installSimHooks } from "./simHooks.js";
 import { activeSlot, resetProgress } from "./save.js";
 import { showMap, startLevel, renderMap } from "./worldmap.js";
@@ -123,9 +123,10 @@ function openManageMenu(tower) {
     towerMenu.appendChild(up);
   }
 
-  // At full level the tower offers its two branches instead. Both are shown
-  // even when unaffordable — knowing what you're saving for is the point.
-  if (!spec && (maxed || capped)) {
+  // At full level — three stars, never merely the realm's cap — the tower
+  // offers its two branches instead. Both are shown even when unaffordable:
+  // knowing what you're saving for is the point.
+  if (!spec && maxed) {
     const note = document.createElement("div");
     note.className = "spec-note";
     note.textContent = "Choose a path — permanent";
@@ -392,10 +393,19 @@ export function updateButtons() {
   // is live for the whole battle rather than only in the gaps. It used to read
   // "Wave 7 incoming…" with no clock at all while a wave was up, which left no
   // way to see how long you had — that is what this display is for.
+  //
+  // While the current wave still holds the field and the countdown is outside
+  // the early-call window, the button shows the clock but can't be pressed —
+  // clear the field, or wait for the last stretch (see canCallNextWave).
   const label = "Send wave " + (state.waveIndex + 2);
   const bonus = earlyCallBonus();
-  btn.textContent = `${label} ⏱${Math.ceil(state.nextWaveIn)}s` +
-    (bonus > 0 ? `  +💰${bonus}` : "");
+  const callable = canCallNextWave();
+  btn.disabled = !callable;
+  btn.title = callable ? ""
+    : `Clear the field, or wait — the next wave can be hurried in its last ${EARLY_CALL_WINDOW} seconds.`;
+  btn.textContent = callable
+    ? `${label} ⏱${Math.ceil(state.nextWaveIn)}s` + (bonus > 0 ? `  +💰${bonus}` : "")
+    : `🔒 Wave ${state.waveIndex + 2} in ⏱${Math.ceil(state.nextWaveIn)}s`;
 }
 
 export function setTip(msg) { el("tip").textContent = msg; }
@@ -493,7 +503,12 @@ el("abilityFire").addEventListener("click", () => armAbility("fire", {
 
 export function resetGame() {
   const { diff, heroDef } = resetRun();
-  el("heroPortrait").querySelector(".icon").textContent = heroDef.icon;
+  // Before the first champion is recruited (data/hero.js) there is no hero
+  // on the field, and no hero UI either — the portrait and the topbar chip
+  // simply aren't part of those battles.
+  el("heroPortrait").hidden = !heroDef;
+  el("heroChip").hidden = !heroDef;
+  if (heroDef) el("heroPortrait").querySelector(".icon").textContent = heroDef.icon;
   el("levelName").textContent = LEVEL.name + " · " + diff.icon + " " + diff.name;
   el("speedBtn").textContent = "Speed: 1×";
   el("pauseBtn").textContent = "⏸ Pause";

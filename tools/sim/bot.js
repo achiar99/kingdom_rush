@@ -17,7 +17,7 @@ import { dist, pointAtDistance } from "../../src/geometry.js";
 import { state, PATH, PATHS, PATH_LEN, BUILD_SPOTS, LEVEL, spotOccupied } from "../../src/state.js";
 import { upgradeCost } from "../../src/entities.js";
 import { getDifficulty } from "../../src/save.js";
-import { startNextWave } from "../../src/simulation.js";
+import { startNextWave, canCallNextWave } from "../../src/simulation.js";
 import * as act from "../../src/actions.js";
 
 // ---------------------------------------------------------------- profiles
@@ -373,6 +373,9 @@ export class Bot {
     // player does that, and it made every measurement meaningless.
     if (state.spawnQueue.length) return;                      // this wave is still arriving
     if (state.enemies.filter((e) => !e.dead).length > 6) return;
+    // The game itself refuses mid-fight calls outside the early-call window
+    // (see canCallNextWave) — don't burn a decision on a press that no-ops.
+    if (!canCallNextWave()) return;
 
     const threat = this.currentThreat();
     const army = armyDps(threat);

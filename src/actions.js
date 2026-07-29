@@ -74,13 +74,16 @@ export function upgradeTower(t) {
 }
 
 // ---------------------------------------------------- specialisations
-// Offered once a tower is fully upgraded, and only where the realm allows
-// full upgrades in the first place. Choosing one is permanent for that spot —
-// selling and rebuilding is the only way back, which is what makes it a
-// decision rather than a menu.
+// Offered once a tower is FULLY upgraded — three stars, no substitutes. The
+// early realms cap upgrades below that, and a capped tower used to offer its
+// paths anyway, which read as nonsense: a one-star tower choosing its
+// permanent destiny. Now the cap simply means specialisation is out of reach
+// until the realm allows the third tier. Choosing one is permanent for that
+// spot — selling and rebuilding is the only way back, which is what makes it
+// a decision rather than a menu.
 export function canSpecialize(t, specKey) {
   if (t.spec) return no("Already specialised.");
-  if (t.level < Math.min(MAX_LEVEL, maxTowerLevelFor(LEVEL.index)))
+  if (t.level < MAX_LEVEL)
     return no("Fully upgrade this tower first.");
   const spec = specDef(t.type, specKey);
   if (!spec) return no("No such specialisation.");

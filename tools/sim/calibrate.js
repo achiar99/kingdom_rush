@@ -90,7 +90,10 @@ async function pump() {
     // only distort the purse. Later levels respond sharply, so they get the
     // full range the solve asked for.
     const ceiling = lv.index < 7 ? 1.35 : 2.2;
-    const tune = Math.min(ceiling, Math.max(0.55, s.value / baseline));
+    // The floor is generous on purpose: the opposite-sides pincer needs less
+    // than half its band value — creeps flooding BOTH edges at once is that
+    // much harder than the same creeps on one road.
+    const tune = Math.min(ceiling, Math.max(0.35, s.value / baseline));
     out[lv.index] = { tune, solved: s.value, rate: s.rate, target };
     console.error(
       `${String(lv.index).padStart(2)} ${lv.id.padEnd(13)} solved ${s.value.toFixed(2)} ` +

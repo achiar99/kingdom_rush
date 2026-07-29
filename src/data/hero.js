@@ -2,6 +2,13 @@
 // A hero is a single free unit you direct by clicking the battlefield; it
 // respawns after a cooldown when it dies, and levels 1→10 by fighting.
 //
+// Champions are RECRUITED across the campaign, not handed over at once:
+// `unlockAt` is the level index whose unlocking brings that hero to the
+// war. The first four levels are fought with towers alone; Achilles arrives
+// at Tenedos Strait (I·5), and each later stage opens with a new champion —
+// so learning a hero is spread over the campaign the same way towers and
+// abilities are (see data/unlocks.js for that ramp).
+//
 // attack: "melee" heroes chase and block ground creeps like phalanx hoplites.
 // "ranged" heroes stand their ground and shoot the furthest-along enemy in
 // range — INCLUDING flyers, which no melee unit can touch — and only fight
@@ -21,7 +28,7 @@
 //   circe      180  33.3   85    ranged  96     20s   armour-ignoring sorcery
 export const HEROES = {
   achilles: {
-    key: "achilles", name: "Achilles", icon: "⚔️",
+    key: "achilles", unlockAt: 4, name: "Achilles", icon: "⚔️",
     tagline: "Best of the Achaeans — sword, shield, and no patience",
     attack: "melee", maxHp: 220, damage: 20, attackInterval: 0.7,
     speed: 100, meleeRange: 22, aggroRadius: 140,
@@ -31,7 +38,7 @@ export const HEROES = {
     colors: { light: "#fff4c2", mid: "#e0a83a", dark: "#8a5c14" },
   },
   ajax: {
-    key: "ajax", name: "Ajax the Great", icon: "🛡️",
+    key: "ajax", unlockAt: 10, name: "Ajax the Great", icon: "🛡️",
     tagline: "The tower-shield. Slow, immovable, unbothered",
     attack: "melee", maxHp: 350, damage: 30, attackInterval: 0.95,
     speed: 70, meleeRange: 24, aggroRadius: 130,
@@ -41,7 +48,7 @@ export const HEROES = {
     colors: { light: "#e8d8a8", mid: "#a8863a", dark: "#5e4414" },
   },
   atalanta: {
-    key: "atalanta", name: "Atalanta", icon: "🏹",
+    key: "atalanta", unlockAt: 20, name: "Atalanta", icon: "🏹",
     tagline: "Raised by a bear, faster than her suitors, hits flyers",
     attack: "ranged", range: 112, projectileSpeed: 480, projColor: "#d8f08a",
     maxHp: 130, damage: 13, attackInterval: 0.45,
@@ -52,7 +59,7 @@ export const HEROES = {
     colors: { light: "#d9f0b8", mid: "#7fb84a", dark: "#3f6b22" },
   },
   perseus: {
-    key: "perseus", name: "Perseus", icon: "🗡️",
+    key: "perseus", unlockAt: 30, name: "Perseus", icon: "🗡️",
     tagline: "Winged sandals and a very sharp harpe",
     attack: "melee", maxHp: 150, damage: 15, attackInterval: 0.42,
     speed: 150, meleeRange: 20, aggroRadius: 150,
@@ -62,7 +69,7 @@ export const HEROES = {
     colors: { light: "#d8f4f4", mid: "#5ec8c8", dark: "#256f74" },
   },
   circe: {
-    key: "circe", name: "Circe", icon: "🪄",
+    key: "circe", unlockAt: 40, name: "Circe", icon: "🪄",
     tagline: "Sorceress of Aiaia — her curses do not care about bronze",
     attack: "ranged", range: 96, projectileSpeed: 420, projColor: "#e0a8ff", magic: true,
     maxHp: 180, damage: 30, attackInterval: 0.9,

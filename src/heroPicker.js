@@ -2,17 +2,27 @@
 // a wooden modal listing every champion as a card. Selecting one writes
 // `progress.hero` and persists with the active save slot; it takes effect
 // on the next battle started.
-import { HEROES, DEFAULT_HERO } from "./data/hero.js";
-import { progress, saveProgress } from "./save.js";
+//
+// Champions are recruited across the campaign (data/hero.js): a locked card
+// shows WHERE its champion joins instead of hiding — knowing who's coming is
+// half the reason to push on — and the picker button itself only exists once
+// the first champion has arrived.
+import { HEROES } from "./data/hero.js";
+import { LEVELS } from "./data/levels.js";
+import { progress, saveProgress, heroUnlocked, anyHeroUnlocked, fieldedHero } from "./save.js";
 import { el } from "./dom.js";
 
 function currentHero() {
-  return HEROES[progress.hero] ? progress.hero : DEFAULT_HERO;
+  return fieldedHero(); // the slot's pick if recruited, else the newest recruit
 }
 
-// map-screen button mirrors the current pick, like the store button mirrors stars
+// map-screen button mirrors the current pick, like the store button mirrors
+// stars — and disappears entirely while no champion has been recruited.
 export function refreshHeroPickButton() {
-  const def = HEROES[currentHero()];
+  const key = currentHero();
+  el("heroPickBtn").hidden = !key;
+  if (!key) return;
+  const def = HEROES[key];
   el("heroPickLabel").textContent = def.name;
   el("heroPickBtn").querySelector(".hbicon").textContent = def.icon;
 }
@@ -22,18 +32,23 @@ function render() {
   const wrap = el("heroCards");
   wrap.innerHTML = "";
   for (const def of Object.values(HEROES)) {
-    const selected = def.key === chosen;
+    const unlocked = heroUnlocked(def.key);
+    const selected = unlocked && def.key === chosen;
+    const at = LEVELS[def.unlockAt];
     const card = document.createElement("button");
-    card.className = "hero-card" + (selected ? " selected" : "");
+    card.className = "hero-card" + (selected ? " selected" : "") + (unlocked ? "" : " locked");
+    card.disabled = !unlocked;
     card.style.setProperty("--hc-light", def.colors.light);
     card.style.setProperty("--hc-dark", def.colors.dark);
     card.innerHTML =
-      `<span class="hicon">${def.icon}</span><b>${def.name}</b>` +
+      `<span class="hicon">${unlocked ? def.icon : "🔒"}</span><b>${def.name}</b>` +
       `<span class="htag">${def.tagline}</span>` +
-      `<span class="hstats">${def.attack === "ranged" ? "🏹" : "⚔️"} ${def.damage}/${def.attackInterval}s<br>` +
-      `❤️ ${def.maxHp} · 👟 ${def.speed}</span>` +
-      `<span class="hpick">Selected</span>`;
-    card.addEventListener("click", () => {
+      (unlocked
+        ? `<span class="hstats">${def.attack === "ranged" ? "🏹" : "⚔️"} ${def.damage}/${def.attackInterval}s<br>` +
+          `❤️ ${def.maxHp} · 👟 ${def.speed}</span>` +
+          `<span class="hpick">Selected</span>`
+        : `<span class="hstats">Joins the war at<br><b>${at.difficulty} · ${at.name}</b></span>`);
+    if (unlocked) card.addEventListener("click", () => {
       if (def.key === progress.hero) return;
       progress.hero = def.key;
       saveProgress();

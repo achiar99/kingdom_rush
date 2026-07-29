@@ -40,9 +40,15 @@ export const TOWER_TYPES = {
     // where the road genuinely doubles back on itself, which is a chokepoint
     // the player earned rather than a bug.
     attack: "none", range: 40,
-    rallyReach: 90,                        // max distance the rally point may be
-                                            // relocated from the tower's build spot —
-                                            // fixed, not level-scaled like `range`
+    // Max distance the rally point may sit from the build spot — fixed, not
+    // level-scaled like `range`. Sized against the maps' own geometry: build
+    // spots stand up to 104px from their road (mapgen's candidate band) and
+    // parallel corridors run 100-145px apart, so at the old 90 a barracks
+    // could fail to reach even its NEAREST road's centreline, and a road
+    // visibly crossing the rally ring was often just out of reach — the ring
+    // is drawn to the centreline, the painted road is ~67px wide. 125 reaches
+    // every spot's own road and the second corridor from any median spot.
+    rallyReach: 125,
     soldierCount: 3, soldierHp: 55, soldierDamage: 9,
     soldierAttackInterval: 0.8, soldierSpeed: 85, soldierRespawn: 7,
     soldierRegenDelay: 5, soldierRegenRate: 3, // out-of-combat HP recovery

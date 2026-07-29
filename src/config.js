@@ -39,7 +39,14 @@ export const CONFIG = {
   // is the one moment the player needs unhurried — reading an unfamiliar map,
   // seeing which towers are unlocked, choosing the first spot — so the battle
   // doesn't begin until they say so. Every wave after that is on the timer.
-  nextWaveDelay: 55,      // seconds from a wave finishing spawning to the next one
+  // Seconds from a wave finishing spawning to the next one launching itself.
+  // 55 read as dead air once early-calling was limited to the last fifteen
+  // seconds: the fight would be all but over with half a minute still on the
+  // clock and nothing to do but watch it. At 35 the cycle is spawn (~15s) +
+  // this, and slow creeps are still walking when the next wave rolls in —
+  // the battle stays a battle. Difficulty was recalibrated for the pace
+  // (see data/calibration.js).
+  nextWaveDelay: 35,
   earlyCallGold: 2,       // gold per whole second saved by calling the wave in
   // ...but only for this many seconds of it. The countdown got about five
   // times longer when waves started overlapping, and the payout rode straight

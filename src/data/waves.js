@@ -42,22 +42,24 @@ const INTRO_LATER = {
 
 // Spawn gap and squad size per role — a runner rush is twenty creeps a third
 // of a second apart; brutes come in threes with a long beat between them.
-// Gaps ~1.5x and counts ~1.2x their original values. The first cut of these
-// numbers made a wave a nine-second burst followed by a hundred seconds of
-// nothing — all wait, no battle. A wave should OCCUPY its slot: these spawn
-// for roughly twenty seconds, and the between-wave delay (CONFIG.nextWaveDelay)
-// is solved against the target curve for this shape, not the old one.
+// The first cut of these numbers made a wave a nine-second burst followed by
+// a hundred seconds of nothing — all wait, no battle; the swing back went too
+// far, stretching a wave into a twenty-second trickle whose stragglers held
+// the (now gated) next-wave button hostage. These gaps are that shape × 0.75:
+// the same creeps arrive as a PUSH, spawning for roughly fifteen seconds,
+// and the between-wave delay (CONFIG.nextWaveDelay) plus the difficulty
+// calibration are solved against this pace, not the old ones.
 const SHAPE = {
-  swarm:     { gap: [1.35, 0.75], count: [7, 14] },
-  swift:     { gap: [0.63, 0.36], count: [7, 19] },
-  shielded:  { gap: [1.2, 0.68],  count: [5, 12] },
-  brute:     { gap: [2.25, 1.28], count: [2, 7] },
-  winged:    { gap: [1.05, 0.54], count: [5, 14] },
-  warded:    { gap: [1.28, 0.75], count: [5, 11] },
-  stormborn: { gap: [1.43, 0.83], count: [4, 8] },
-  brood:     { gap: [1.5, 0.9],   count: [4, 8] },   // each becomes three
-  revenant:  { gap: [1.65, 1.05], count: [2, 7] },
-  champion:  { gap: [4.5, 2.4],   count: [1, 3] },
+  swarm:     { gap: [1.0, 0.56],  count: [7, 14] },
+  swift:     { gap: [0.47, 0.27], count: [7, 19] },
+  shielded:  { gap: [0.9, 0.51],  count: [5, 12] },
+  brute:     { gap: [1.7, 0.96],  count: [2, 7] },
+  winged:    { gap: [0.79, 0.4],  count: [5, 14] },
+  warded:    { gap: [0.96, 0.56], count: [5, 11] },
+  stormborn: { gap: [1.07, 0.62], count: [4, 8] },
+  brood:     { gap: [1.13, 0.68], count: [4, 8] },   // each becomes three
+  revenant:  { gap: [1.24, 0.79], count: [2, 7] },
+  champion:  { gap: [3.4, 1.8],   count: [1, 3] },
 };
 
 const lerp = (a, b, t) => a + (b - a) * t;
